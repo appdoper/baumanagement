@@ -6,9 +6,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import type { Project } from "@/domain/project/project.entity";
+import type { Task } from "@/domain/task/task.entity";
 import { TASK_STATUSES } from "@/domain/task/task.entity";
-import { createTaskAction } from "@/app/actions/task.actions";
-import { eurosToCents } from "@/lib/format";
+import {
+  createTaskAction,
+  updateTaskAction,
+} from "@/app/actions/task.actions";
+import { eurosToCents, toDateInputValue } from "@/lib/format";
 import { STATUS_LABELS } from "./task-status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,13 +47,16 @@ type FormValues = z.infer<typeof formSchema>;
 export function TaskForm({
   projects,
   defaultProjectId,
+  task,
   onSuccess,
 }: {
   projects: Project[];
   defaultProjectId?: string;
+  task?: Task;
   onSuccess?: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
+  const isEdit = Boolean(task);
 
   const {
     register,
@@ -60,12 +67,15 @@ export function TaskForm({
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      title: "",
-      projectId: defaultProjectId ?? "",
-      description: "",
-      status: "TODO",
-      estimatedCostEuros: "",
-      deadline: "",
+      title: task?.title ?? "",
+      projectId: task?.projectId ?? defaultProjectId ?? "",
+      description: task?.description ?? "",
+      status: task?.status ?? "TODO",
+      estimatedCostEuros:
+        task?.estimatedCostCents != null
+          ? String(task.estimatedCostCents / 100)
+          : "",
+      deadline: toDateInputValue(task?.deadline),
     },
   });
 
@@ -77,17 +87,21 @@ export function TaskForm({
       ? Number(values.estimatedCostEuros.replace(",", "."))
       : null;
 
+    const payload = {
+      title: values.title,
+      projectId: values.projectId,
+      description: values.description || null,
+      status: values.status,
+      estimatedCostCents: euros != null ? eurosToCents(euros) : null,
+      deadline: values.deadline || null,
+    };
+
     startTransition(async () => {
-      const result = await createTaskAction({
-        title: values.title,
-        projectId: values.projectId,
-        description: values.description || null,
-        status: values.status,
-        estimatedCostCents: euros != null ? eurosToCents(euros) : null,
-        deadline: values.deadline || null,
-      });
+      const result = task
+        ? await updateTaskAction(task.id, payload)
+        : await createTaskAction(payload);
       if (result.ok) {
-        toast.success("Vorgang erstellt.");
+        toast.success(isEdit ? "Vorgang aktualisiert." : "Vorgang erstellt.");
         onSuccess?.();
       } else {
         toast.error(result.error);
@@ -169,7 +183,11 @@ export function TaskForm({
 
       <SheetFooter className="px-0">
         <Button type="submit" disabled={isPending}>
-          {isPending ? "Speichern…" : "Vorgang erstellen"}
+          {isPending
+            ? "Speichern…"
+            : isEdit
+              ? "Änderungen speichern"
+              : "Vorgang erstellen"}
         </Button>
       </SheetFooter>
     </form>
