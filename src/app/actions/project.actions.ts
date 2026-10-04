@@ -25,3 +25,30 @@ export async function createProjectAction(
     return toActionError(e);
   }
 }
+
+export async function updateProjectAction(
+  id: string,
+  input: CreateProjectActionInput,
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const project = await projectService.update(id, {
+      name: input.name,
+      description: input.description ?? null,
+      parentId: input.parentId ?? null,
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, data: { id: project.id } };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function deleteProjectAction(id: string): Promise<ActionResult> {
+  try {
+    await projectService.delete(id);
+    revalidatePath("/", "layout");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
