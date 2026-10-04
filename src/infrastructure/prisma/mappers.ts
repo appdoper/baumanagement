@@ -1,9 +1,13 @@
 import type {
   Project as PrismaProject,
   Task as PrismaTask,
+  TaskDependency as PrismaTaskDependency,
+  User as PrismaUser,
 } from "@prisma/client";
 import type { Project } from "@/domain/project/project.entity";
 import type { Task } from "@/domain/task/task.entity";
+import type { TaskDependency } from "@/domain/task/dependency";
+import type { User } from "@/domain/user/user.entity";
 
 // Prisma enum string values are identical to the domain union values,
 // so mapping is a straight pass-through (typed, not cast blindly).
@@ -15,6 +19,28 @@ export function toProject(row: PrismaProject): Project {
     parentId: row.parentId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+export function toUser(row: PrismaUser): User {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email ?? "",
+    role: row.role,
+    requiresPasswordChange: row.requiresPasswordChange,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toDependency(row: PrismaTaskDependency): TaskDependency {
+  return {
+    id: row.id,
+    type: row.type,
+    lagDays: row.lagDays,
+    predecessorId: row.predecessorId,
+    successorId: row.successorId,
+    createdAt: row.createdAt,
   };
 }
 

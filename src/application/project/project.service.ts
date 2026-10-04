@@ -1,5 +1,8 @@
 import type { Project } from "@/domain/project/project.entity";
-import type { ProjectRepository } from "@/domain/project/project.repository";
+import type {
+  ProjectRepository,
+  ProjectWithMetrics,
+} from "@/domain/project/project.repository";
 import { NotFoundError, ValidationError } from "@/domain/shared/errors";
 import { parseOrThrow } from "@/application/shared/validate";
 import {
@@ -26,6 +29,10 @@ export class ProjectService {
 
   list(): Promise<Project[]> {
     return this.projects.findAll();
+  }
+
+  listWithMetrics(): Promise<ProjectWithMetrics[]> {
+    return this.projects.findAllWithMetrics();
   }
 
   listChildren(parentId: string | null): Promise<Project[]> {

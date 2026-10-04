@@ -2,6 +2,7 @@ import type {
   NewProject,
   ProjectPatch,
   ProjectRepository,
+  ProjectWithMetrics,
 } from "@/domain/project/project.repository";
 import type { Project } from "@/domain/project/project.entity";
 import { prisma } from "./client";
@@ -29,6 +30,38 @@ export class PrismaProjectRepository implements ProjectRepository {
       orderBy: { createdAt: "asc" },
     });
     return rows.map(toProject);
+  }
+
+  async findAllWithMetrics(): Promise<ProjectWithMetrics[]> {
+    // Two grouped aggregations instead of loading every task: total cost over
+    // all tasks, open count only for unfinished ones.
+    const [rows, costByProject, openByProject] = await Promise.all([
+      prisma.project.findMany({ orderBy: { createdAt: "asc" } }),
+      prisma.task.groupBy({
+        by: ["projectId"],
+        _sum: { estimatedCostCents: true },
+      }),
+      prisma.task.groupBy({
+        by: ["projectId"],
+        where: { status: { not: "DONE" } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const costMap = new Map(
+      costByProject.map((g) => [g.projectId, g._sum.estimatedCostCents ?? 0]),
+    );
+    const openMap = new Map(
+      openByProject.map((g) => [g.projectId, g._count._all]),
+    );
+
+    return rows.map((row) => ({
+      ...toProject(row),
+      metrics: {
+        totalCostCents: costMap.get(row.id) ?? 0,
+        openTaskCount: openMap.get(row.id) ?? 0,
+      },
+    }));
   }
 
   async findChildren(parentId: string | null): Promise<Project[]> {

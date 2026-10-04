@@ -6,6 +6,7 @@ import type {
 import type { ProjectRepository } from "@/domain/project/project.repository";
 import { NotFoundError } from "@/domain/shared/errors";
 import { parseOrThrow } from "@/application/shared/validate";
+import type { DependencyService } from "./dependency.service";
 import {
   createTaskSchema,
   updateTaskSchema,
@@ -17,6 +18,7 @@ export class TaskService {
   constructor(
     private readonly tasks: TaskRepository,
     private readonly projects: ProjectRepository,
+    private readonly dependencies: DependencyService,
   ) {}
 
   async create(input: CreateTaskInput): Promise<Task> {
@@ -37,9 +39,17 @@ export class TaskService {
 
   async update(id: string, input: UpdateTaskInput): Promise<Task> {
     const data = parseOrThrow(updateTaskSchema, input, "Ungültige Vorgangsdaten.");
-    await this.assertExists(id);
+    const existing = await this.tasks.findById(id);
+    if (!existing) throw new NotFoundError("Task", id);
     if (data.projectId) await this.assertProjectExists(data.projectId);
-    return this.tasks.update(id, data);
+
+    const updated = await this.tasks.update(id, data);
+    if (updated.status === "DONE" && existing.status !== "DONE") {
+      await this.dependencies.syncAfterCompletion(updated.id);
+    } else if (existing.status === "DONE" && updated.status !== "DONE") {
+      await this.dependencies.syncAfterReopen(updated.id);
+    }
+    return updated;
   }
 
   async delete(id: string): Promise<void> {

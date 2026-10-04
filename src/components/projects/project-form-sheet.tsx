@@ -76,6 +76,13 @@ export function ProjectFormSheet({
   // Exclude the project itself from the parent options to avoid self-reference.
   const parentOptions = projects.filter((p) => p.id !== project?.id);
 
+  // Base UI renders <Select.Value> from the raw value unless `items` maps
+  // values → labels. Without it the trigger would show the ID or "__none__".
+  const parentItems: Record<string, string> = {
+    [NONE]: "Keines (Hauptprojekt)",
+    ...Object.fromEntries(parentOptions.map((p) => [p.id, p.name])),
+  };
+
   function onSubmit(values: FormValues) {
     const payload = {
       name: values.name,
@@ -102,8 +109,8 @@ export function ProjectFormSheet({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger render={trigger} />
-      <SheetContent>
-        <SheetHeader>
+      <SheetContent className="gap-0 data-[side=right]:sm:max-w-xl">
+        <SheetHeader className="shrink-0 pb-4">
           <SheetTitle>
             {isEdit ? "Projekt bearbeiten" : "Neues Projekt"}
           </SheetTitle>
@@ -116,46 +123,49 @@ export function ProjectFormSheet({
 
         <form
           onSubmit={handleSubmit(onSubmit)}
-          className="flex flex-1 flex-col gap-4 px-4"
+          className="flex min-h-0 flex-1 flex-col"
         >
-          <div className="space-y-2">
-            <Label htmlFor="project-name">Name *</Label>
-            <Input id="project-name" {...register("name")} autoFocus />
-            {errors.name && (
-              <p className="text-sm text-destructive">{errors.name.message}</p>
-            )}
+          <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
+            <div className="space-y-2">
+              <Label htmlFor="project-name">Name *</Label>
+              <Input id="project-name" {...register("name")} autoFocus />
+              {errors.name && (
+                <p className="text-sm text-destructive">{errors.name.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="project-description">Beschreibung</Label>
+              <Textarea
+                id="project-description"
+                className="min-h-[150px]"
+                {...register("description")}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="project-parent">Übergeordnetes Projekt</Label>
+              <Select
+                items={parentItems}
+                defaultValue={initialParent ?? NONE}
+                onValueChange={(v) => setValue("parentId", v ?? undefined)}
+              >
+                <SelectTrigger id="project-parent" className="w-full">
+                  <SelectValue placeholder="Keines (Hauptprojekt)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Keines (Hauptprojekt)</SelectItem>
+                  {parentOptions.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="project-description">Beschreibung</Label>
-            <Textarea
-              id="project-description"
-              rows={3}
-              {...register("description")}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="project-parent">Übergeordnetes Projekt</Label>
-            <Select
-              defaultValue={initialParent ?? NONE}
-              onValueChange={(v) => setValue("parentId", v ?? undefined)}
-            >
-              <SelectTrigger id="project-parent" className="w-full">
-                <SelectValue placeholder="Keines (Hauptprojekt)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>Keines (Hauptprojekt)</SelectItem>
-                {parentOptions.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <SheetFooter className="px-0">
+          <SheetFooter className="shrink-0 flex-row justify-end gap-2 border-t">
             <Button type="submit" disabled={isPending}>
               {isPending
                 ? "Speichern…"

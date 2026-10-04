@@ -82,6 +82,11 @@ export function TaskForm({
   const projectId = watch("projectId");
   const status = watch("status");
 
+  // Base UI needs `items` (value → label) so the trigger shows names, not IDs.
+  const projectItems: Record<string, string> = Object.fromEntries(
+    projects.map((p) => [p.id, p.name]),
+  );
+
   function onSubmit(values: FormValues) {
     const euros = values.estimatedCostEuros
       ? Number(values.estimatedCostEuros.replace(",", "."))
@@ -110,78 +115,87 @@ export function TaskForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-1 flex-col gap-4 px-4">
-      <div className="space-y-2">
-        <Label htmlFor="task-title">Titel *</Label>
-        <Input id="task-title" {...register("title")} autoFocus />
-        {errors.title && (
-          <p className="text-sm text-destructive">{errors.title.message}</p>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="task-project">Projekt *</Label>
-        <Select value={projectId} onValueChange={(v) => setValue("projectId", v ?? "")}>
-          <SelectTrigger id="task-project" className="w-full">
-            <SelectValue placeholder="Projekt wählen" />
-          </SelectTrigger>
-          <SelectContent>
-            {projects.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {errors.projectId && (
-          <p className="text-sm text-destructive">{errors.projectId.message}</p>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="task-description">Beschreibung</Label>
-        <Textarea id="task-description" rows={4} {...register("description")} />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
         <div className="space-y-2">
-          <Label htmlFor="task-status">Status</Label>
-          <Select value={status} onValueChange={(v) => setValue("status", (v ?? "TODO") as FormValues["status"])}>
-            <SelectTrigger id="task-status" className="w-full">
-              <SelectValue />
+          <Label htmlFor="task-title">Titel *</Label>
+          <Input id="task-title" {...register("title")} autoFocus />
+          {errors.title && (
+            <p className="text-sm text-destructive">{errors.title.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="task-project">Projekt *</Label>
+          <Select items={projectItems} value={projectId} onValueChange={(v) => setValue("projectId", v ?? "")}>
+            <SelectTrigger id="task-project" className="w-full">
+              <SelectValue placeholder="Bitte wählen" />
             </SelectTrigger>
             <SelectContent>
-              {TASK_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_LABELS[s]}
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {errors.projectId && (
+            <p className="text-sm text-destructive">{errors.projectId.message}</p>
+          )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="task-deadline">Deadline</Label>
-          <Input id="task-deadline" type="date" {...register("deadline")} />
+          <Label htmlFor="task-description">Beschreibung</Label>
+          <Textarea
+            id="task-description"
+            className="min-h-[200px]"
+            {...register("description")}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="task-status">Status</Label>
+            <Select items={STATUS_LABELS} value={status} onValueChange={(v) => setValue("status", (v ?? "TODO") as FormValues["status"])}>
+              <SelectTrigger id="task-status" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TASK_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {STATUS_LABELS[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="task-deadline">Deadline</Label>
+            <Input id="task-deadline" type="date" {...register("deadline")} />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="task-cost">Geschätzte Kosten (€)</Label>
+          <Input
+            id="task-cost"
+            inputMode="decimal"
+            placeholder="z. B. 150,00"
+            {...register("estimatedCostEuros")}
+          />
+          {errors.estimatedCostEuros && (
+            <p className="text-sm text-destructive">
+              {errors.estimatedCostEuros.message}
+            </p>
+          )}
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="task-cost">Geschätzte Kosten (€)</Label>
-        <Input
-          id="task-cost"
-          inputMode="decimal"
-          placeholder="z. B. 150,00"
-          {...register("estimatedCostEuros")}
-        />
-        {errors.estimatedCostEuros && (
-          <p className="text-sm text-destructive">
-            {errors.estimatedCostEuros.message}
-          </p>
-        )}
-      </div>
-
-      <SheetFooter className="px-0">
+      <SheetFooter className="shrink-0 flex-row justify-end gap-2 border-t">
         <Button type="submit" disabled={isPending}>
           {isPending
             ? "Speichern…"

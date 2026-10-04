@@ -26,6 +26,71 @@ enum DependencyType {
   START_TO_FINISH // SF: reserved for later phases
 }
 
+enum UserRole {
+  ADMIN
+  USER
+}
+
+// ---------- Auth.js (NextAuth v5) ----------
+// Credentials + JWT session strategy. Users are created by an admin with a
+// generated password (scrypt-hashed in `passwordHash`); there is no email flow.
+// Account/Session/VerificationToken are the standard adapter models, kept for a
+// future adapter-backed provider though they stay empty with the JWT strategy.
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          UserRole  @default(USER)
+  // Force a password change on next login (set for new users and admin resets).
+  requiresPasswordChange Boolean @default(true)
+  accounts      Account[]
+  sessions      Session[]
+  assignedTasks Task[]    @relation("TaskAssignee")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
 // ---------- WBS: hierarchical projects ----------
 model Project {
   id          String  @id @default(cuid())
@@ -65,6 +130,10 @@ model Task {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  // Optional assignee — who is working on this task (set null if user removed)
+  assigneeId String?
+  assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
   // One primary location per task (1:n)
   locationId String?
   location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
@@ -79,6 +148,7 @@ model Task {
 
   @@index([projectId])
   @@index([locationId])
+  @@index([assigneeId])
   @@index([status])
 }
 

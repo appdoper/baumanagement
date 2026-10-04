@@ -3,6 +3,7 @@
 import { Pencil, Trash2 } from "lucide-react";
 import type { Project } from "@/domain/project/project.entity";
 import type { Task } from "@/domain/task/task.entity";
+import type { PredecessorLink } from "@/domain/task/dependency";
 import { Button } from "@/components/ui/button";
 import { TaskFormSheet } from "./task-form-sheet";
 import { DeleteTaskDialog } from "./delete-task-dialog";
@@ -10,15 +11,21 @@ import { DeleteTaskDialog } from "./delete-task-dialog";
 export function TaskRowActions({
   task,
   projects,
+  projectTasks,
+  predecessors,
 }: {
   task: Task;
   projects: Project[];
+  projectTasks: Task[];
+  predecessors: PredecessorLink[];
 }) {
   return (
     <div className="flex items-center justify-end gap-1">
       <TaskFormSheet
         projects={projects}
         task={task}
+        projectTasks={projectTasks}
+        predecessors={predecessors}
         trigger={
           <Button
             variant="ghost"
