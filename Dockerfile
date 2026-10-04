@@ -37,14 +37,10 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY --from=builder /app/.next/standalone ./
 # Static assets are NOT part of the standalone bundle and must be copied in.
 COPY --from=builder /app/.next/static ./.next/static
-# Prisma generated client + query engine (ensure the musl engine ships even if
-# the standalone tracer misses the native binary).
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-# Prisma CLI + engines + the `.bin/prisma` symlink so `npx prisma migrate
-# deploy` resolves locally at startup (no network fetch).
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
+# Full node_modules (overwrites the traced subset) so the Prisma CLI and its
+# transitive deps (e.g. `effect` via @prisma/config) are present for
+# `prisma migrate deploy` at startup — the traced subset only covers runtime.
+COPY --from=builder /app/node_modules ./node_modules
 # Schema + migrations consumed by `prisma migrate deploy`.
 COPY --from=builder /app/prisma ./prisma
 
