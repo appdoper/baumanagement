@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { projectService } from "@/container";
 import { buildProjectTree } from "@/lib/project-tree";
 import { ProjectNav } from "@/components/projects/project-nav";
-import { NewProjectButton } from "@/components/projects/new-project-button";
+import { ProjectFormSheet } from "@/components/projects/project-form-sheet";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 
 export default async function AppLayout({
@@ -26,7 +28,19 @@ export default async function AppLayout({
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Projekte
           </span>
-          <NewProjectButton projects={projects} />
+          <ProjectFormSheet
+            projects={projects}
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                aria-label="Neues Projekt"
+              >
+                <Plus className="size-4" />
+              </Button>
+            }
+          />
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
