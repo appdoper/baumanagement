@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { projectService } from "@/container";
+import { locationService, projectService } from "@/container";
 import { buildProjectTree } from "@/lib/project-tree";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
@@ -15,7 +15,10 @@ export default async function AppLayout({
   const session = await auth();
   if (!session) redirect("/login");
 
-  const projects = await projectService.list();
+  const [projects, locations] = await Promise.all([
+    projectService.list(),
+    locationService.list(),
+  ]);
   const tree = buildProjectTree(projects);
   const userEmail = session.user?.email;
   const isAdmin = session.user?.role === "ADMIN";
@@ -25,6 +28,7 @@ export default async function AppLayout({
       <aside className="hidden w-72 shrink-0 border-r bg-sidebar text-sidebar-foreground md:block">
         <AppSidebar
           projects={projects}
+          locations={locations}
           tree={tree}
           userEmail={userEmail}
           isAdmin={isAdmin}
@@ -36,13 +40,14 @@ export default async function AppLayout({
           <MobileNav>
             <AppSidebar
               projects={projects}
+              locations={locations}
               tree={tree}
               userEmail={userEmail}
               isAdmin={isAdmin}
             />
           </MobileNav>
           <Link href="/" className="font-semibold tracking-tight">
-            Hausmanagement
+            Baumanagement
           </Link>
         </header>
 

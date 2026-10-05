@@ -17,7 +17,7 @@ export default async function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle>Hausmanagement</CardTitle>
+          <CardTitle>Baumanagement</CardTitle>
           <CardDescription>
             Bitte melde dich an, um fortzufahren.
           </CardDescription>

@@ -15,12 +15,14 @@ export interface NewProject {
   name: string;
   description?: string | null;
   parentId?: string | null;
+  locationIds?: string[];
 }
 
 export interface ProjectPatch {
   name?: string;
   description?: string | null;
   parentId?: string | null;
+  locationIds?: string[];
 }
 
 /**

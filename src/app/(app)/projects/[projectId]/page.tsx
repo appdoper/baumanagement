@@ -1,5 +1,10 @@
 import { notFound } from "next/navigation";
-import { dependencyService, projectService, taskService } from "@/container";
+import {
+  dependencyService,
+  locationService,
+  projectService,
+  taskService,
+} from "@/container";
 import { NotFoundError } from "@/domain/shared/errors";
 import { ProjectTaskViews } from "@/components/tasks/project-task-views";
 
@@ -18,9 +23,10 @@ export default async function ProjectPage({
     throw e;
   }
 
-  const [tasks, projects] = await Promise.all([
+  const [tasks, projects, locations] = await Promise.all([
     taskService.list({ projectId }),
     projectService.list(),
+    locationService.list(),
   ]);
 
   const predecessorMap = await dependencyService.getPredecessorMap(
@@ -35,6 +41,7 @@ export default async function ProjectPage({
       childCount={childCount}
       tasks={tasks}
       projects={projects}
+      locations={locations}
       projectId={projectId}
       predecessorMap={predecessorMap}
     />

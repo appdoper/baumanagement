@@ -1,23 +1,38 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { LayoutGrid, List, Pencil, Plus, Trash2, Workflow } from "lucide-react";
 import type { Project } from "@/domain/project/project.entity";
+import type { Location } from "@/domain/location/location.entity";
 import type { Task } from "@/domain/task/task.entity";
+import { TASK_PERSONS } from "@/domain/task/task.entity";
 import type { PredecessorLink } from "@/domain/task/dependency";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ProjectFormSheet } from "@/components/projects/project-form-sheet";
 import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog";
 import { TaskFormSheet } from "./task-form-sheet";
 import { TaskTable } from "./task-table";
 import { TaskBoard } from "./task-board";
 import { ProjectDependencyGraph } from "./project-dependency-graph";
+import { PERSON_LABELS } from "./person-badge";
+
+const ALL = "__all__";
+const NONE = "__none__";
 
 export function ProjectTaskViews({
   project,
   childCount,
   tasks,
   projects,
+  locations,
   projectId,
   predecessorMap,
 }: {
@@ -25,9 +40,24 @@ export function ProjectTaskViews({
   childCount: number;
   tasks: Task[];
   projects: Project[];
+  locations: Location[];
   projectId: string;
   predecessorMap: Record<string, PredecessorLink[]>;
 }) {
+  const [personFilter, setPersonFilter] = useState<string>(ALL);
+
+  const filteredTasks = useMemo(() => {
+    if (personFilter === ALL) return tasks;
+    if (personFilter === NONE) return tasks.filter((t) => !t.person);
+    return tasks.filter((t) => t.person === personFilter);
+  }, [tasks, personFilter]);
+
+  const personItems: Record<string, string> = {
+    [ALL]: "Alle Personen",
+    ...PERSON_LABELS,
+    [NONE]: "Ohne Person",
+  };
+
   return (
     <Tabs defaultValue="list" className="flex h-full min-h-0 flex-col gap-4 p-4 md:p-8">
       <header className="flex shrink-0 flex-col gap-4">
@@ -46,6 +76,7 @@ export function ProjectTaskViews({
             <ProjectFormSheet
               projects={projects}
               project={project}
+              locations={locations}
               trigger={
                 <Button
                   variant="outline"
@@ -86,38 +117,63 @@ export function ProjectTaskViews({
           </div>
         </div>
 
-        <TabsList className="self-start">
-          <TabsTrigger value="list">
-            <List />
-            Liste
-          </TabsTrigger>
-          <TabsTrigger value="board">
-            <LayoutGrid />
-            Board
-          </TabsTrigger>
-          <TabsTrigger value="graph">
-            <Workflow />
-            Graph
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList className="self-start">
+            <TabsTrigger value="list">
+              <List />
+              Liste
+            </TabsTrigger>
+            <TabsTrigger value="board">
+              <LayoutGrid />
+              Board
+            </TabsTrigger>
+            <TabsTrigger value="graph">
+              <Workflow />
+              Graph
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Person:</span>
+            <Select
+              items={personItems}
+              value={personFilter}
+              onValueChange={(v) => setPersonFilter(v ?? ALL)}
+            >
+              <SelectTrigger size="sm" className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>Alle Personen</SelectItem>
+                {TASK_PERSONS.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {PERSON_LABELS[p]}
+                  </SelectItem>
+                ))}
+                <SelectItem value={NONE}>Ohne Person</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </header>
 
       <TabsContent value="list" className="min-h-0 flex-1 overflow-auto">
         <TaskTable
-          tasks={tasks}
+          tasks={filteredTasks}
           projects={projects}
           predecessorMap={predecessorMap}
         />
       </TabsContent>
       <TabsContent value="board" className="min-h-0 flex-1 overflow-hidden">
         <TaskBoard
-          tasks={tasks}
+          tasks={filteredTasks}
           projects={projects}
           projectId={projectId}
           predecessorMap={predecessorMap}
         />
       </TabsContent>
       <TabsContent value="graph" className="min-h-0 flex-1 overflow-hidden">
+        {/* Graph shows the full dependency network regardless of the filter. */}
         <ProjectDependencyGraph tasks={tasks} predecessorMap={predecessorMap} />
       </TabsContent>
     </Tabs>

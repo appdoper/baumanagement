@@ -23,20 +23,26 @@ export function TaskFormSheet({
   projectTasks = [],
   predecessors = [],
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   projects: Project[];
   defaultProjectId?: string;
   task?: Task;
   projectTasks?: Task[];
   predecessors?: PredecessorLink[];
-  trigger: ReactElement;
+  trigger?: ReactElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = controlledOnOpenChange ?? setUncontrolledOpen;
   const isEdit = Boolean(task);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={trigger} />
+      {trigger && <SheetTrigger render={trigger} />}
       <SheetContent className="gap-0 data-[side=right]:sm:max-w-2xl">
         <SheetHeader className="shrink-0 pb-4">
           <SheetTitle>{isEdit ? "Vorgang bearbeiten" : "Neuer Vorgang"}</SheetTitle>

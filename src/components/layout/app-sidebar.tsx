@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, Users } from "lucide-react";
 import type { Project } from "@/domain/project/project.entity";
+import type { Location } from "@/domain/location/location.entity";
 import type { ProjectNode } from "@/lib/project-tree";
 import { ProjectNav } from "@/components/projects/project-nav";
 import { ProjectFormSheet } from "@/components/projects/project-form-sheet";
@@ -9,11 +10,13 @@ import { Button } from "@/components/ui/button";
 
 export function AppSidebar({
   projects,
+  locations = [],
   tree,
   userEmail,
   isAdmin = false,
 }: {
   projects: Project[];
+  locations?: Location[];
   tree: ProjectNode[];
   userEmail?: string | null;
   isAdmin?: boolean;
@@ -22,7 +25,7 @@ export function AppSidebar({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-14 shrink-0 items-center border-b px-4">
         <Link href="/" className="font-semibold tracking-tight">
-          Hausmanagement
+          Baumanagement
         </Link>
       </div>
 
@@ -32,6 +35,7 @@ export function AppSidebar({
         </span>
         <ProjectFormSheet
           projects={projects}
+          locations={locations}
           trigger={
             <Button
               variant="ghost"

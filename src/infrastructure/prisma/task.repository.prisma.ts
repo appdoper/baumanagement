@@ -14,6 +14,8 @@ export class PrismaTaskRepository implements TaskRepository {
       data: {
         title: data.title,
         description: data.description ?? null,
+        procurementSource: data.procurementSource ?? null,
+        person: data.person ?? null,
         status: data.status ?? "TODO",
         estimatedCostCents: data.estimatedCostCents ?? null,
         currency: data.currency ?? "EUR",

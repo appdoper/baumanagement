@@ -8,6 +8,7 @@ export interface CreateProjectActionInput {
   name: string;
   description?: string | null;
   parentId?: string | null;
+  locationIds?: string[];
 }
 
 export async function createProjectAction(
@@ -18,6 +19,7 @@ export async function createProjectAction(
       name: input.name,
       description: input.description ?? null,
       parentId: input.parentId ?? null,
+      locationIds: input.locationIds ?? [],
     });
     revalidatePath("/", "layout");
     return { ok: true, data: { id: project.id } };
@@ -35,6 +37,7 @@ export async function updateProjectAction(
       name: input.name,
       description: input.description ?? null,
       parentId: input.parentId ?? null,
+      locationIds: input.locationIds ?? [],
     });
     revalidatePath("/", "layout");
     return { ok: true, data: { id: project.id } };

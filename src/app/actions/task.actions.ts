@@ -2,13 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { taskService } from "@/container";
-import type { TaskStatus } from "@/domain/task/task.entity";
+import type { TaskPerson, TaskStatus } from "@/domain/task/task.entity";
 import { toActionError, type ActionResult } from "./result";
 
 export interface CreateTaskActionInput {
   title: string;
   projectId: string;
   description?: string | null;
+  procurementSource?: string | null;
+  person?: TaskPerson | null;
   status?: TaskStatus;
   estimatedCostCents?: number | null;
   deadline?: string | null;
@@ -22,6 +24,8 @@ export async function createTaskAction(
       title: input.title,
       projectId: input.projectId,
       description: input.description ?? null,
+      procurementSource: input.procurementSource ?? null,
+      person: input.person ?? null,
       status: input.status,
       estimatedCostCents: input.estimatedCostCents ?? null,
       deadline: input.deadline ? new Date(input.deadline) : null,
@@ -42,6 +46,8 @@ export async function updateTaskAction(
       title: input.title,
       projectId: input.projectId,
       description: input.description ?? null,
+      procurementSource: input.procurementSource ?? null,
+      person: input.person ?? null,
       status: input.status,
       estimatedCostCents: input.estimatedCostCents ?? null,
       deadline: input.deadline ? new Date(input.deadline) : null,

@@ -1,19 +1,23 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import type { Project } from "@/domain/project/project.entity";
-import type { Task } from "@/domain/task/task.entity";
-import { TASK_STATUSES } from "@/domain/task/task.entity";
+import type { Task, TaskPerson } from "@/domain/task/task.entity";
+import { TASK_PERSONS, TASK_STATUSES } from "@/domain/task/task.entity";
 import {
   createTaskAction,
   updateTaskAction,
 } from "@/app/actions/task.actions";
 import { eurosToCents, toDateInputValue } from "@/lib/format";
 import { STATUS_LABELS } from "./task-status-badge";
+import { PERSON_LABELS } from "./person-badge";
+import { LinkifiedText } from "./linkified-text";
+import { TaskAttachments } from "./task-attachments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,10 +31,14 @@ import {
 } from "@/components/ui/select";
 import { SheetFooter } from "@/components/ui/sheet";
 
+const NONE = "__none__";
+
 const formSchema = z.object({
   title: z.string().trim().min(1, "Titel ist erforderlich."),
   projectId: z.string().min(1, "Projekt ist erforderlich."),
   description: z.string().trim().optional(),
+  procurementSource: z.string().trim().optional(),
+  person: z.string().optional(),
   status: z.enum(TASK_STATUSES),
   estimatedCostEuros: z
     .string()
@@ -43,6 +51,8 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+const URL_LIKE = /^(https?:\/\/|www\.)/i;
 
 export function TaskForm({
   projects,
@@ -57,6 +67,11 @@ export function TaskForm({
 }) {
   const [isPending, startTransition] = useTransition();
   const isEdit = Boolean(task);
+  // Show existing descriptions as rendered (clickable) text first; start in
+  // edit mode when there is nothing to show yet.
+  const [editingDescription, setEditingDescription] = useState(
+    !task?.description,
+  );
 
   const {
     register,
@@ -70,6 +85,8 @@ export function TaskForm({
       title: task?.title ?? "",
       projectId: task?.projectId ?? defaultProjectId ?? "",
       description: task?.description ?? "",
+      procurementSource: task?.procurementSource ?? "",
+      person: task?.person ?? NONE,
       status: task?.status ?? "TODO",
       estimatedCostEuros:
         task?.estimatedCostCents != null
@@ -81,6 +98,14 @@ export function TaskForm({
 
   const projectId = watch("projectId");
   const status = watch("status");
+  const person = watch("person") ?? NONE;
+  const description = watch("description") ?? "";
+  const procurementSource = watch("procurementSource") ?? "";
+
+  const personItems: Record<string, string> = {
+    [NONE]: "Keine",
+    ...PERSON_LABELS,
+  };
 
   // Base UI needs `items` (value → label) so the trigger shows names, not IDs.
   const projectItems: Record<string, string> = Object.fromEntries(
@@ -96,6 +121,11 @@ export function TaskForm({
       title: values.title,
       projectId: values.projectId,
       description: values.description || null,
+      procurementSource: values.procurementSource || null,
+      person:
+        values.person && values.person !== NONE
+          ? (values.person as TaskPerson)
+          : null,
       status: values.status,
       estimatedCostCents: euros != null ? eurosToCents(euros) : null,
       deadline: values.deadline || null,
@@ -148,12 +178,76 @@ export function TaskForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="task-description">Beschreibung</Label>
-          <Textarea
-            id="task-description"
-            className="min-h-[200px]"
-            {...register("description")}
+          <div className="flex items-center justify-between">
+            <Label htmlFor="task-description">Beschreibung</Label>
+            {!editingDescription && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditingDescription(true)}
+              >
+                <Pencil className="size-3.5" />
+                Bearbeiten
+              </Button>
+            )}
+          </div>
+          {editingDescription ? (
+            <Textarea
+              id="task-description"
+              className="min-h-[200px]"
+              {...register("description")}
+            />
+          ) : (
+            <div
+              onClick={() => setEditingDescription(true)}
+              title="Zum Bearbeiten klicken"
+              className="min-h-[80px] cursor-text whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-sm"
+            >
+              {description ? (
+                <LinkifiedText text={description} />
+              ) : (
+                <span className="text-muted-foreground">
+                  Keine Beschreibung.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="task-procurement">Beschaffungsquelle</Label>
+          <Input
+            id="task-procurement"
+            placeholder="Händler, Lieferant oder Link"
+            {...register("procurementSource")}
           />
+          {URL_LIKE.test(procurementSource.trim()) && (
+            <p className="text-xs">
+              <LinkifiedText text={procurementSource.trim()} />
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="task-person">Person</Label>
+          <Select
+            items={personItems}
+            value={person}
+            onValueChange={(v) => setValue("person", v ?? NONE)}
+          >
+            <SelectTrigger id="task-person" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>Keine</SelectItem>
+              {TASK_PERSONS.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PERSON_LABELS[p]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -193,6 +287,16 @@ export function TaskForm({
             </p>
           )}
         </div>
+
+        {task ? (
+          <div className="border-t pt-4">
+            <TaskAttachments taskId={task.id} projectId={task.projectId} />
+          </div>
+        ) : (
+          <p className="border-t pt-4 text-xs text-muted-foreground">
+            Anhänge können nach dem Erstellen des Vorgangs hinzugefügt werden.
+          </p>
+        )}
       </div>
 
       <SheetFooter className="shrink-0 flex-row justify-end gap-2 border-t">

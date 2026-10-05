@@ -7,10 +7,16 @@ export const TASK_STATUSES = [
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+export const TASK_PERSONS = ["KARL", "FELIX", "GEMEINSAM"] as const;
+
+export type TaskPerson = (typeof TASK_PERSONS)[number];
+
 export interface Task {
   id: string;
   title: string;
   description: string | null;
+  procurementSource: string | null;
+  person: TaskPerson | null;
   status: TaskStatus;
   estimatedCostCents: number | null;
   currency: string;

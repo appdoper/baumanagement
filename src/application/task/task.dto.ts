@@ -1,11 +1,13 @@
 import { z } from "zod";
-import { TASK_STATUSES } from "@/domain/task/task.entity";
+import { TASK_PERSONS, TASK_STATUSES } from "@/domain/task/task.entity";
 
 const dateish = z.coerce.date();
 
 export const createTaskSchema = z.object({
   title: z.string().trim().min(1, "Titel darf nicht leer sein.").max(200),
   description: z.string().trim().max(10000).nullish(),
+  procurementSource: z.string().trim().max(500).nullish(),
+  person: z.enum(TASK_PERSONS).nullish(),
   status: z.enum(TASK_STATUSES).optional(),
   estimatedCostCents: z.number().int().nonnegative().nullish(),
   currency: z.string().trim().length(3).optional(),

@@ -1,8 +1,10 @@
-import type { Task, TaskStatus } from "./task.entity";
+import type { Task, TaskPerson, TaskStatus } from "./task.entity";
 
 export interface NewTask {
   title: string;
   description?: string | null;
+  procurementSource?: string | null;
+  person?: TaskPerson | null;
   status?: TaskStatus;
   estimatedCostCents?: number | null;
   currency?: string;
@@ -18,6 +20,8 @@ export interface NewTask {
 export interface TaskPatch {
   title?: string;
   description?: string | null;
+  procurementSource?: string | null;
+  person?: TaskPerson | null;
   status?: TaskStatus;
   estimatedCostCents?: number | null;
   currency?: string;

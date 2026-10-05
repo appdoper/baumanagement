@@ -6,10 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import type { Project } from "@/domain/project/project.entity";
+import type { Location } from "@/domain/location/location.entity";
 import {
   createProjectAction,
   updateProjectAction,
 } from "@/app/actions/project.actions";
+import { LocationPicker } from "./location-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,17 +46,22 @@ type FormValues = z.infer<typeof formSchema>;
 export function ProjectFormSheet({
   projects,
   project,
+  locations = [],
   defaultParentId,
   trigger,
 }: {
   projects: Project[];
   project?: Project;
+  locations?: Location[];
   defaultParentId?: string | null;
   trigger: ReactElement;
 }) {
   const isEdit = Boolean(project);
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [locationIds, setLocationIds] = useState<string[]>(
+    project?.locationIds ?? [],
+  );
 
   const initialParent = project?.parentId ?? defaultParentId ?? null;
 
@@ -89,6 +96,7 @@ export function ProjectFormSheet({
       description: values.description?.trim() ? values.description.trim() : null,
       parentId:
         values.parentId && values.parentId !== NONE ? values.parentId : null,
+      locationIds,
     };
     startTransition(async () => {
       const result = project
@@ -98,6 +106,7 @@ export function ProjectFormSheet({
         toast.success(isEdit ? "Projekt aktualisiert." : "Projekt erstellt.");
         if (!isEdit) {
           reset({ name: "", description: "", parentId: NONE });
+          setLocationIds([]);
         }
         setOpen(false);
       } else {
@@ -162,6 +171,15 @@ export function ProjectFormSheet({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Standorte</Label>
+              <LocationPicker
+                locations={locations}
+                selectedIds={locationIds}
+                onChange={setLocationIds}
+              />
             </div>
           </div>
 

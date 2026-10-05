@@ -10,8 +10,10 @@ import { formatEuro, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TaskStatusBadge } from "./task-status-badge";
 import { TaskBlockedBadge } from "./task-blocked-badge";
+import { PersonBadge } from "./person-badge";
 import { TaskRowActions } from "./task-row-actions";
 import { TaskQuickActions } from "./task-quick-actions";
+import { TaskFormSheet } from "./task-form-sheet";
 import {
   Table,
   TableBody,
@@ -84,6 +86,132 @@ function SortHeader({
   );
 }
 
+function TaskTableRow({
+  task,
+  projects,
+  tasks,
+  predecessors,
+}: {
+  task: Task;
+  projects: Project[];
+  tasks: Task[];
+  predecessors: PredecessorLink[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <TableRow
+        className="cursor-pointer"
+        onClick={() => setOpen(true)}
+        aria-label={`Vorgang „${task.title}“ bearbeiten`}
+      >
+        <TableCell className="font-medium">
+          <div className="flex items-center gap-2">
+            <span>{task.title}</span>
+            {task.person && <PersonBadge person={task.person} />}
+            <TaskBlockedBadge predecessors={predecessors} />
+          </div>
+        </TableCell>
+        <TableCell>
+          <TaskStatusBadge status={task.status} />
+        </TableCell>
+        <TableCell className="text-muted-foreground">
+          {formatDate(task.deadline)}
+        </TableCell>
+        <TableCell className="text-right tabular-nums">
+          {formatEuro(task.estimatedCostCents)}
+        </TableCell>
+        <TableCell>
+          {/* Stop clicks on the actions from also opening the edit sheet. */}
+          <div
+            className="flex items-center justify-end gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <TaskQuickActions task={task} />
+            <TaskRowActions
+              taskId={task.id}
+              projectId={task.projectId}
+              taskTitle={task.title}
+            />
+          </div>
+        </TableCell>
+      </TableRow>
+      <TaskFormSheet
+        projects={projects}
+        task={task}
+        projectTasks={tasks}
+        predecessors={predecessors}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </>
+  );
+}
+
+function TaskMobileCard({
+  task,
+  projects,
+  tasks,
+  predecessors,
+}: {
+  task: Task;
+  projects: Project[];
+  tasks: Task[];
+  predecessors: PredecessorLink[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        className="flex cursor-pointer flex-col gap-3 rounded-lg border p-4 text-left"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 font-medium">
+            <span className="break-words">{task.title}</span>
+            {task.person && <PersonBadge person={task.person} />}
+            <TaskBlockedBadge predecessors={predecessors} />
+          </div>
+          <TaskStatusBadge status={task.status} />
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span>Deadline: {formatDate(task.deadline)}</span>
+          <span className="tabular-nums">
+            {formatEuro(task.estimatedCostCents)}
+          </span>
+        </div>
+        <div
+          className="flex items-center justify-end gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <TaskQuickActions task={task} />
+          <TaskRowActions
+            taskId={task.id}
+            projectId={task.projectId}
+            taskTitle={task.title}
+          />
+        </div>
+      </div>
+      <TaskFormSheet
+        projects={projects}
+        task={task}
+        projectTasks={tasks}
+        predecessors={predecessors}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </>
+  );
+}
+
 export function TaskTable({
   tasks,
   projects,
@@ -124,129 +252,51 @@ export function TaskTable({
           <span className="text-xs font-medium text-muted-foreground">
             Sortieren:
           </span>
-          <SortHeader
-            label="Status"
-            columnKey="status"
-            sort={sort}
-            onSort={onSort}
-          />
-          <SortHeader
-            label="Deadline"
-            columnKey="deadline"
-            sort={sort}
-            onSort={onSort}
-          />
-          <SortHeader
-            label="Kosten"
-            columnKey="cost"
-            sort={sort}
-            onSort={onSort}
-          />
+          <SortHeader label="Status" columnKey="status" sort={sort} onSort={onSort} />
+          <SortHeader label="Deadline" columnKey="deadline" sort={sort} onSort={onSort} />
+          <SortHeader label="Kosten" columnKey="cost" sort={sort} onSort={onSort} />
         </div>
-        {sortedTasks.map((task) => {
-          const predecessors = predecessorMap[task.id] ?? [];
-          return (
-            <div
-              key={task.id}
-              className="flex flex-col gap-3 rounded-lg border p-4"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2 font-medium">
-                  <span className="break-words">{task.title}</span>
-                  <TaskBlockedBadge predecessors={predecessors} />
-                </div>
-                <TaskStatusBadge status={task.status} />
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <span>Deadline: {formatDate(task.deadline)}</span>
-                <span className="tabular-nums">
-                  {formatEuro(task.estimatedCostCents)}
-                </span>
-              </div>
-              <div className="flex items-center justify-end gap-1">
-                <TaskQuickActions task={task} />
-                <TaskRowActions
-                  task={task}
-                  projects={projects}
-                  projectTasks={tasks}
-                  predecessors={predecessors}
-                />
-              </div>
-            </div>
-          );
-        })}
+        {sortedTasks.map((task) => (
+          <TaskMobileCard
+            key={task.id}
+            task={task}
+            projects={projects}
+            tasks={tasks}
+            predecessors={predecessorMap[task.id] ?? []}
+          />
+        ))}
       </div>
 
       {/* Tablet/desktop: full sortable table. */}
       <div className="hidden rounded-lg border md:block">
-      <Table className="min-w-[640px]">
-        <TableHeader>
-          <TableRow>
-            <TableHead>Titel</TableHead>
-            <TableHead className="w-32">
-              <SortHeader
-                label="Status"
-                columnKey="status"
-                sort={sort}
-                onSort={onSort}
+        <Table className="min-w-[640px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Titel</TableHead>
+              <TableHead className="w-32">
+                <SortHeader label="Status" columnKey="status" sort={sort} onSort={onSort} />
+              </TableHead>
+              <TableHead className="w-32">
+                <SortHeader label="Deadline" columnKey="deadline" sort={sort} onSort={onSort} />
+              </TableHead>
+              <TableHead className="w-32 text-right">
+                <SortHeader label="Kosten" columnKey="cost" sort={sort} onSort={onSort} align="right" />
+              </TableHead>
+              <TableHead className="w-40 text-right">Aktionen</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedTasks.map((task) => (
+              <TaskTableRow
+                key={task.id}
+                task={task}
+                projects={projects}
+                tasks={tasks}
+                predecessors={predecessorMap[task.id] ?? []}
               />
-            </TableHead>
-            <TableHead className="w-32">
-              <SortHeader
-                label="Deadline"
-                columnKey="deadline"
-                sort={sort}
-                onSort={onSort}
-              />
-            </TableHead>
-            <TableHead className="w-32 text-right">
-              <SortHeader
-                label="Kosten"
-                columnKey="cost"
-                sort={sort}
-                onSort={onSort}
-                align="right"
-              />
-            </TableHead>
-            <TableHead className="w-40 text-right">Aktionen</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedTasks.map((task) => {
-            const predecessors = predecessorMap[task.id] ?? [];
-            return (
-              <TableRow key={task.id}>
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-2">
-                    <span>{task.title}</span>
-                    <TaskBlockedBadge predecessors={predecessors} />
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <TaskStatusBadge status={task.status} />
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(task.deadline)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatEuro(task.estimatedCostCents)}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center justify-end gap-1">
-                    <TaskQuickActions task={task} />
-                    <TaskRowActions
-                      task={task}
-                      projects={projects}
-                      projectTasks={tasks}
-                      predecessors={predecessors}
-                    />
-                  </div>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </>
   );

@@ -10,8 +10,8 @@ const dateFormatter = new Intl.DateTimeFormat("de-DE", {
 });
 
 export function formatEuro(cents: number | null | undefined): string {
-  if (cents == null) return "–";
-  return euroFormatter.format(cents / 100);
+  // No value is treated as 0 and shown as "0,00 €" (not a dash).
+  return euroFormatter.format((cents ?? 0) / 100);
 }
 
 export function formatDate(date: Date | string | null | undefined): string {

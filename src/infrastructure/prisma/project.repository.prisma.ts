@@ -8,6 +8,9 @@ import type { Project } from "@/domain/project/project.entity";
 import { prisma } from "./client";
 import { toProject } from "./mappers";
 
+// Load just the location ids for the many-to-many Standort tags.
+const PROJECT_INCLUDE = { locations: { select: { id: true } } } as const;
+
 export class PrismaProjectRepository implements ProjectRepository {
   async create(data: NewProject): Promise<Project> {
     const row = await prisma.project.create({
@@ -15,19 +18,27 @@ export class PrismaProjectRepository implements ProjectRepository {
         name: data.name,
         description: data.description ?? null,
         parentId: data.parentId ?? null,
+        ...(data.locationIds && data.locationIds.length > 0
+          ? { locations: { connect: data.locationIds.map((id) => ({ id })) } }
+          : {}),
       },
+      include: PROJECT_INCLUDE,
     });
     return toProject(row);
   }
 
   async findById(id: string): Promise<Project | null> {
-    const row = await prisma.project.findUnique({ where: { id } });
+    const row = await prisma.project.findUnique({
+      where: { id },
+      include: PROJECT_INCLUDE,
+    });
     return row ? toProject(row) : null;
   }
 
   async findAll(): Promise<Project[]> {
     const rows = await prisma.project.findMany({
       orderBy: { createdAt: "asc" },
+      include: PROJECT_INCLUDE,
     });
     return rows.map(toProject);
   }
@@ -36,7 +47,10 @@ export class PrismaProjectRepository implements ProjectRepository {
     // Two grouped aggregations instead of loading every task: total cost over
     // all tasks, open count only for unfinished ones.
     const [rows, costByProject, openByProject] = await Promise.all([
-      prisma.project.findMany({ orderBy: { createdAt: "asc" } }),
+      prisma.project.findMany({
+        orderBy: { createdAt: "asc" },
+        include: PROJECT_INCLUDE,
+      }),
       prisma.task.groupBy({
         by: ["projectId"],
         _sum: { estimatedCostCents: true },
@@ -68,14 +82,22 @@ export class PrismaProjectRepository implements ProjectRepository {
     const rows = await prisma.project.findMany({
       where: { parentId },
       orderBy: { createdAt: "asc" },
+      include: PROJECT_INCLUDE,
     });
     return rows.map(toProject);
   }
 
   async update(id: string, data: ProjectPatch): Promise<Project> {
+    const { locationIds, ...rest } = data;
     const row = await prisma.project.update({
       where: { id },
-      data,
+      data: {
+        ...rest,
+        ...(locationIds !== undefined
+          ? { locations: { set: locationIds.map((lid) => ({ id: lid })) } }
+          : {}),
+      },
+      include: PROJECT_INCLUDE,
     });
     return toProject(row);
   }

@@ -19,6 +19,12 @@ enum TaskStatus {
   DONE
 }
 
+enum TaskPerson {
+  KARL
+  FELIX
+  GEMEINSAM
+}
+
 enum DependencyType {
   FINISH_TO_START // FS: successor starts after predecessor finishes
   START_TO_START // SS: successor starts after predecessor starts
@@ -103,6 +109,9 @@ model Project {
 
   tasks Task[]
 
+  // Standort tags (many-to-many). A project can carry several locations.
+  locations Location[] @relation("ProjectLocations")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -115,6 +124,12 @@ model Task {
   title       String
   description String?
   status      TaskStatus @default(TODO)
+
+  // Free-text procurement source (shop, supplier, URL, …). Not shown in lists.
+  procurementSource String?
+
+  // Who is responsible (Karl, Felix, or both). Used for filtering.
+  person TaskPerson?
 
   // Money stored as integer cents to avoid float rounding errors
   estimatedCostCents Int?
@@ -140,6 +155,8 @@ model Task {
 
   shops TaskShop[]
 
+  attachments TaskAttachment[]
+
   dependenciesOut TaskDependency[] @relation("DependencyPredecessor")
   dependenciesIn  TaskDependency[] @relation("DependencySuccessor")
 
@@ -150,6 +167,7 @@ model Task {
   @@index([locationId])
   @@index([assigneeId])
   @@index([status])
+  @@index([person])
 }
 
 // ---------- Dependencies (cross-project) ----------
@@ -181,7 +199,8 @@ model Location {
   parent   Location?  @relation("LocationTree", fields: [parentId], references: [id], onDelete: SetNull)
   children Location[] @relation("LocationTree")
 
-  tasks Task[]
+  tasks    Task[]
+  projects Project[] @relation("ProjectLocations")
 
   createdAt DateTime @default(now())
 
@@ -201,6 +220,22 @@ model Shop {
 }
 
 // ---------- Join: Task <-> Shop ----------
+// File attachments (PDFs, images, …) stored inline in Postgres as bytea.
+// `data` is only selected when streaming a download — never in list queries.
+model TaskAttachment {
+  id       String @id @default(cuid())
+  taskId   String
+  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  filename String
+  mimeType String
+  size     Int
+  data     Bytes
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
 model TaskShop {
   taskId String
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
