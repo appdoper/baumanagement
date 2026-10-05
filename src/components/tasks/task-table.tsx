@@ -23,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type SortKey = "status" | "deadline" | "cost";
+type SortKey = "status" | "plannedStart" | "deadline" | "cost";
 type SortDir = "asc" | "desc";
 
 const STATUS_ORDER = Object.fromEntries(
@@ -36,6 +36,8 @@ function sortValue(task: Task, key: SortKey): number | null {
       return STATUS_ORDER[task.status];
     case "cost":
       return task.estimatedCostCents;
+    case "plannedStart":
+      return task.plannedStart ? new Date(task.plannedStart).getTime() : null;
     case "deadline":
       return task.deadline ? new Date(task.deadline).getTime() : null;
   }
@@ -116,6 +118,9 @@ function TaskTableRow({
           <TaskStatusBadge status={task.status} />
         </TableCell>
         <TableCell className="text-muted-foreground">
+          {formatDate(task.plannedStart)}
+        </TableCell>
+        <TableCell className="text-muted-foreground">
           {formatDate(task.deadline)}
         </TableCell>
         <TableCell className="text-right tabular-nums">
@@ -183,6 +188,7 @@ function TaskMobileCard({
           <TaskStatusBadge status={task.status} />
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span>Startdatum: {formatDate(task.plannedStart)}</span>
           <span>Deadline: {formatDate(task.deadline)}</span>
           <span className="tabular-nums">
             {formatEuro(task.estimatedCostCents)}
@@ -253,6 +259,7 @@ export function TaskTable({
             Sortieren:
           </span>
           <SortHeader label="Status" columnKey="status" sort={sort} onSort={onSort} />
+          <SortHeader label="Startdatum" columnKey="plannedStart" sort={sort} onSort={onSort} />
           <SortHeader label="Deadline" columnKey="deadline" sort={sort} onSort={onSort} />
           <SortHeader label="Kosten" columnKey="cost" sort={sort} onSort={onSort} />
         </div>
@@ -269,12 +276,15 @@ export function TaskTable({
 
       {/* Tablet/desktop: full sortable table. */}
       <div className="hidden rounded-lg border md:block">
-        <Table className="min-w-[640px]">
+        <Table className="min-w-[720px]">
           <TableHeader>
             <TableRow>
               <TableHead>Titel</TableHead>
               <TableHead className="w-32">
                 <SortHeader label="Status" columnKey="status" sort={sort} onSort={onSort} />
+              </TableHead>
+              <TableHead className="w-36">
+                <SortHeader label="Startdatum" columnKey="plannedStart" sort={sort} onSort={onSort} />
               </TableHead>
               <TableHead className="w-32">
                 <SortHeader label="Deadline" columnKey="deadline" sort={sort} onSort={onSort} />
