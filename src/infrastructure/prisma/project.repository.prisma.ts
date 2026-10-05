@@ -5,15 +5,17 @@ import type {
   ProjectWithMetrics,
 } from "@/domain/project/project.repository";
 import type { Project } from "@/domain/project/project.entity";
-import { prisma } from "./client";
+import { prisma, type Db } from "./client";
 import { toProject } from "./mappers";
 
 // Load just the location ids for the many-to-many Standort tags.
 const PROJECT_INCLUDE = { locations: { select: { id: true } } } as const;
 
 export class PrismaProjectRepository implements ProjectRepository {
+  constructor(private readonly db: Db = prisma) {}
+
   async create(data: NewProject): Promise<Project> {
-    const row = await prisma.project.create({
+    const row = await this.db.project.create({
       data: {
         name: data.name,
         description: data.description ?? null,
@@ -28,15 +30,16 @@ export class PrismaProjectRepository implements ProjectRepository {
   }
 
   async findById(id: string): Promise<Project | null> {
-    const row = await prisma.project.findUnique({
-      where: { id },
+    const row = await this.db.project.findFirst({
+      where: { id, deletedAt: null },
       include: PROJECT_INCLUDE,
     });
     return row ? toProject(row) : null;
   }
 
   async findAll(): Promise<Project[]> {
-    const rows = await prisma.project.findMany({
+    const rows = await this.db.project.findMany({
+      where: { deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: PROJECT_INCLUDE,
     });
@@ -47,17 +50,19 @@ export class PrismaProjectRepository implements ProjectRepository {
     // Two grouped aggregations instead of loading every task: total cost over
     // all tasks, open count only for unfinished ones.
     const [rows, costByProject, openByProject] = await Promise.all([
-      prisma.project.findMany({
+      this.db.project.findMany({
+        where: { deletedAt: null },
         orderBy: { createdAt: "asc" },
         include: PROJECT_INCLUDE,
       }),
-      prisma.task.groupBy({
+      this.db.task.groupBy({
         by: ["projectId"],
+        where: { deletedAt: null },
         _sum: { estimatedCostCents: true },
       }),
-      prisma.task.groupBy({
+      this.db.task.groupBy({
         by: ["projectId"],
-        where: { status: { not: "DONE" } },
+        where: { status: { not: "DONE" }, deletedAt: null },
         _count: { _all: true },
       }),
     ]);
@@ -79,8 +84,8 @@ export class PrismaProjectRepository implements ProjectRepository {
   }
 
   async findChildren(parentId: string | null): Promise<Project[]> {
-    const rows = await prisma.project.findMany({
-      where: { parentId },
+    const rows = await this.db.project.findMany({
+      where: { parentId, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: PROJECT_INCLUDE,
     });
@@ -89,7 +94,7 @@ export class PrismaProjectRepository implements ProjectRepository {
 
   async update(id: string, data: ProjectPatch): Promise<Project> {
     const { locationIds, ...rest } = data;
-    const row = await prisma.project.update({
+    const row = await this.db.project.update({
       where: { id },
       data: {
         ...rest,
@@ -102,7 +107,10 @@ export class PrismaProjectRepository implements ProjectRepository {
     return toProject(row);
   }
 
-  async delete(id: string): Promise<void> {
-    await prisma.project.delete({ where: { id } });
+  async softDeleteMany(ids: readonly string[]): Promise<void> {
+    await this.db.project.updateMany({
+      where: { id: { in: [...ids] }, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
   }
 }

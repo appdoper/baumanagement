@@ -30,10 +30,12 @@ export interface ProjectPatch {
  */
 export interface ProjectRepository {
   create(data: NewProject): Promise<Project>;
+  /** Only live (not soft-deleted) projects are returned. */
   findById(id: string): Promise<Project | null>;
   findAll(): Promise<Project[]>;
   findAllWithMetrics(): Promise<ProjectWithMetrics[]>;
   findChildren(parentId: string | null): Promise<Project[]>;
   update(id: string, data: ProjectPatch): Promise<Project>;
-  delete(id: string): Promise<void>;
+  /** Soft delete every live project in the given set (project subtree). */
+  softDeleteMany(ids: readonly string[]): Promise<void>;
 }

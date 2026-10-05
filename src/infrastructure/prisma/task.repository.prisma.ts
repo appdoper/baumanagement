@@ -5,12 +5,14 @@ import type {
   TaskRepository,
 } from "@/domain/task/task.repository";
 import type { Task } from "@/domain/task/task.entity";
-import { prisma } from "./client";
+import { prisma, type Db } from "./client";
 import { toTask } from "./mappers";
 
 export class PrismaTaskRepository implements TaskRepository {
+  constructor(private readonly db: Db = prisma) {}
+
   async create(data: NewTask): Promise<Task> {
-    const row = await prisma.task.create({
+    const row = await this.db.task.create({
       data: {
         title: data.title,
         description: data.description ?? null,
@@ -32,15 +34,16 @@ export class PrismaTaskRepository implements TaskRepository {
   }
 
   async findById(id: string): Promise<Task | null> {
-    const row = await prisma.task.findUnique({ where: { id } });
+    const row = await this.db.task.findFirst({ where: { id, deletedAt: null } });
     return row ? toTask(row) : null;
   }
 
   async findAll(filter?: TaskFilter): Promise<Task[]> {
-    const rows = await prisma.task.findMany({
+    const rows = await this.db.task.findMany({
       where: {
         projectId: filter?.projectId,
         status: filter?.status,
+        deletedAt: null,
       },
       orderBy: { createdAt: "asc" },
     });
@@ -48,14 +51,38 @@ export class PrismaTaskRepository implements TaskRepository {
   }
 
   async update(id: string, data: TaskPatch): Promise<Task> {
-    const row = await prisma.task.update({
+    const row = await this.db.task.update({
       where: { id },
-      data,
+      data: { ...data, version: { increment: 1 } },
     });
     return toTask(row);
   }
 
-  async delete(id: string): Promise<void> {
-    await prisma.task.delete({ where: { id } });
+  async updateWithVersion(
+    id: string,
+    expectedVersion: number,
+    data: TaskPatch,
+  ): Promise<Task | null> {
+    // Atomic compare-and-set: writes only if the version still matches.
+    const res = await this.db.task.updateMany({
+      where: { id, version: expectedVersion, deletedAt: null },
+      data: { ...data, version: { increment: 1 } },
+    });
+    if (res.count === 0) return null;
+    return this.findById(id);
+  }
+
+  async softDelete(id: string): Promise<void> {
+    await this.db.task.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  async softDeleteByProjects(projectIds: readonly string[]): Promise<void> {
+    await this.db.task.updateMany({
+      where: { projectId: { in: [...projectIds] }, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
   }
 }

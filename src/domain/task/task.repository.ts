@@ -44,8 +44,22 @@ export interface TaskFilter {
  */
 export interface TaskRepository {
   create(data: NewTask): Promise<Task>;
+  /** Only live (not soft-deleted) tasks are returned. */
   findById(id: string): Promise<Task | null>;
   findAll(filter?: TaskFilter): Promise<Task[]>;
+  /** System update: bumps the version, no concurrency check. */
   update(id: string, data: TaskPatch): Promise<Task>;
-  delete(id: string): Promise<void>;
+  /**
+   * Optimistic-concurrency update: only writes if the stored version still
+   * equals `expectedVersion` (then bumps it). Returns null on a mismatch.
+   */
+  updateWithVersion(
+    id: string,
+    expectedVersion: number,
+    data: TaskPatch,
+  ): Promise<Task | null>;
+  /** Soft delete: marks the task as deleted instead of removing the row. */
+  softDelete(id: string): Promise<void>;
+  /** Soft delete every live task belonging to any of the given projects. */
+  softDeleteByProjects(projectIds: readonly string[]): Promise<void>;
 }

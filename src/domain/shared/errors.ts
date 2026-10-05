@@ -19,3 +19,15 @@ export class ValidationError extends DomainError {
     super(message);
   }
 }
+
+/**
+ * Optimistic-concurrency conflict: the record was changed by someone else
+ * between read and write (version mismatch).
+ */
+export class ConflictError extends DomainError {
+  constructor(
+    message = "Dieser Vorgang wurde in der Zwischenzeit von jemand anderem bearbeitet.",
+  ) {
+    super(message);
+  }
+}

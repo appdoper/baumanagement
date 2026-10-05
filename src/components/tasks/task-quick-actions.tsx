@@ -23,7 +23,12 @@ export function TaskQuickActions({ task }: { task: Task }) {
 
   function setStatus(status: TaskStatus) {
     startTransition(async () => {
-      const res = await updateTaskStatusAction(task.id, status, task.projectId);
+      const res = await updateTaskStatusAction(
+        task.id,
+        status,
+        task.projectId,
+        task.version,
+      );
       if (!res.ok) toast.error(res.error);
     });
   }

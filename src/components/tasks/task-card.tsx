@@ -45,7 +45,12 @@ export function TaskCard({
     const status = (v ?? task.status) as TaskStatus;
     if (status === task.status) return;
     startTransition(async () => {
-      const res = await updateTaskStatusAction(task.id, status, projectId);
+      const res = await updateTaskStatusAction(
+        task.id,
+        status,
+        projectId,
+        task.version,
+      );
       if (!res.ok) toast.error(res.error);
     });
   }

@@ -72,6 +72,7 @@ export function toDependency(row: PrismaTaskDependency): TaskDependency {
 export function toTask(row: PrismaTask): Task {
   return {
     id: row.id,
+    version: row.version,
     title: row.title,
     description: row.description,
     procurementSource: row.procurementSource,

@@ -13,6 +13,8 @@ export type TaskPerson = (typeof TASK_PERSONS)[number];
 
 export interface Task {
   id: string;
+  /** Optimistic-concurrency version; bumped on every write. */
+  version: number;
   title: string;
   description: string | null;
   procurementSource: string | null;

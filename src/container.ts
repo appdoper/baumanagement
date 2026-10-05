@@ -9,6 +9,7 @@ import { PrismaAttachmentRepository } from "@/infrastructure/prisma/attachment.r
 import { PrismaLocationRepository } from "@/infrastructure/prisma/location.repository.prisma";
 import { PrismaDependencyRepository } from "@/infrastructure/prisma/dependency.repository.prisma";
 import { PrismaUserRepository } from "@/infrastructure/prisma/user.repository.prisma";
+import { PrismaUnitOfWork } from "@/infrastructure/prisma/unit-of-work.prisma";
 import { ProjectService } from "@/application/project/project.service";
 import { TaskService } from "@/application/task/task.service";
 import { AttachmentService } from "@/application/task/attachment.service";
@@ -23,12 +24,17 @@ const locationRepository = new PrismaLocationRepository();
 const dependencyRepository = new PrismaDependencyRepository();
 const userRepository = new PrismaUserRepository();
 
+// Shared transaction boundary for all multi-repository writes.
+const unitOfWork = new PrismaUnitOfWork();
+
 export const dependencyService = new DependencyService(
+  unitOfWork,
   dependencyRepository,
   taskRepository,
 );
-export const projectService = new ProjectService(projectRepository);
+export const projectService = new ProjectService(unitOfWork, projectRepository);
 export const taskService = new TaskService(
+  unitOfWork,
   taskRepository,
   projectRepository,
   dependencyService,

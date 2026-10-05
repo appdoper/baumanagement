@@ -20,7 +20,10 @@ export const createTaskSchema = z.object({
   locationId: z.string().cuid().nullish(),
 });
 
-export const updateTaskSchema = createTaskSchema.partial();
+export const updateTaskSchema = createTaskSchema.partial().extend({
+  // Optimistic-concurrency token the client read; checked on write.
+  version: z.number().int().positive().optional(),
+});
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;

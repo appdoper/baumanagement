@@ -1,3 +1,4 @@
+import type { TaskStatus } from "@/domain/task/task.entity";
 import type { TaskRepository } from "@/domain/task/task.repository";
 import type { DependencyRepository } from "@/domain/task/dependency.repository";
 import type {
@@ -7,10 +8,12 @@ import type {
 import { shouldBlockSuccessor, wouldCreateCycle } from "@/domain/task/dependency";
 import { NotFoundError, ValidationError } from "@/domain/shared/errors";
 import { parseOrThrow } from "@/application/shared/validate";
+import type { Repositories, UnitOfWork } from "@/application/shared/unit-of-work";
 import { addDependencySchema, type AddDependencyInput } from "./dependency.dto";
 
 export class DependencyService {
   constructor(
+    private readonly uow: UnitOfWork,
     private readonly dependencies: DependencyRepository,
     private readonly tasks: TaskRepository,
   ) {}
@@ -21,76 +24,90 @@ export class DependencyService {
       input,
       "Ungültige Abhängigkeitsdaten.",
     );
-
-    const [predecessor, successor] = await Promise.all([
-      this.tasks.findById(data.predecessorId),
-      this.tasks.findById(data.successorId),
-    ]);
-    if (!predecessor) throw new NotFoundError("Task", data.predecessorId);
-    if (!successor) throw new NotFoundError("Task", data.successorId);
-
-    const edges = await this.dependencies.listEdges();
-    if (
-      wouldCreateCycle(edges, {
-        predecessorId: data.predecessorId,
-        successorId: data.successorId,
-      })
-    ) {
-      throw new ValidationError(
-        "Diese Abhängigkeit würde einen Zyklus erzeugen.",
-      );
-    }
-
     const type = data.type ?? "FINISH_TO_START";
-    const dependency = await this.dependencies.create({ ...data, type });
 
-    // FS to an unfinished predecessor blocks the successor automatically.
-    if (
-      type === "FINISH_TO_START" &&
-      predecessor.status !== "DONE" &&
-      successor.status !== "DONE" &&
-      successor.status !== "BLOCKED"
-    ) {
-      await this.tasks.update(successor.id, { status: "BLOCKED" });
-    }
+    // Serializable: the cycle check reads the whole edge set and then inserts.
+    // Running it serializable guarantees two concurrent adds cannot both pass
+    // the check and jointly form a cycle.
+    return this.uow.run(
+      async (repos) => {
+        const predecessor = await repos.tasks.findById(data.predecessorId);
+        if (!predecessor) throw new NotFoundError("Task", data.predecessorId);
+        const successor = await repos.tasks.findById(data.successorId);
+        if (!successor) throw new NotFoundError("Task", data.successorId);
 
-    return dependency;
+        const edges = await repos.dependencies.listEdges();
+        if (
+          wouldCreateCycle(edges, {
+            predecessorId: data.predecessorId,
+            successorId: data.successorId,
+          })
+        ) {
+          throw new ValidationError(
+            "Diese Abhängigkeit würde einen Zyklus erzeugen.",
+          );
+        }
+
+        const dependency = await repos.dependencies.create({ ...data, type });
+
+        // FS to an unfinished predecessor blocks the successor automatically.
+        if (
+          type === "FINISH_TO_START" &&
+          predecessor.status !== "DONE" &&
+          successor.status !== "DONE" &&
+          successor.status !== "BLOCKED"
+        ) {
+          await repos.tasks.update(successor.id, { status: "BLOCKED" });
+        }
+
+        return dependency;
+      },
+      { isolationLevel: "Serializable" },
+    );
   }
 
   async removeDependency(id: string): Promise<void> {
-    const dependency = await this.dependencies.findById(id);
-    if (!dependency) throw new NotFoundError("TaskDependency", id);
-    await this.dependencies.delete(id);
-    // Removing a blocker may free the successor.
-    await this.unblockIfSatisfied(dependency.successorId);
+    await this.uow.run(async (repos) => {
+      const dependency = await repos.dependencies.findById(id);
+      if (!dependency) throw new NotFoundError("TaskDependency", id);
+      await repos.dependencies.delete(id);
+      // Removing a blocker may free the successor.
+      await this.unblockIfSatisfied(dependency.successorId, repos);
+    });
   }
 
   /**
    * Call after a task's status becomes DONE: unblock successors whose
-   * Finish-to-Start predecessors are now all satisfied.
+   * Finish-to-Start predecessors are now all satisfied. Runs on the caller's
+   * transaction repositories so it is part of the same atomic unit.
    */
-  async syncAfterCompletion(taskId: string): Promise<void> {
-    const outgoing = await this.dependencies.findByPredecessor(taskId);
-    await Promise.all(
-      outgoing.map((dep) => this.unblockIfSatisfied(dep.successorId)),
-    );
+  async syncAfterCompletion(
+    taskId: string,
+    repos: Repositories,
+  ): Promise<void> {
+    const outgoing = await repos.dependencies.findByPredecessor(taskId);
+    for (const dep of outgoing) {
+      await this.unblockIfSatisfied(dep.successorId, repos);
+    }
   }
 
   /**
    * Call after a task is reopened (DONE → unfinished): every unfinished
    * Finish-to-Start successor must go back to BLOCKED.
    */
-  async syncAfterReopen(taskId: string): Promise<void> {
-    const outgoing = await this.dependencies.findByPredecessor(taskId);
-    await Promise.all(
-      outgoing.map(async (dep) => {
-        if (dep.type !== "FINISH_TO_START") return;
-        const successor = await this.tasks.findById(dep.successorId);
-        if (successor && successor.status !== "DONE" && successor.status !== "BLOCKED") {
-          await this.tasks.update(successor.id, { status: "BLOCKED" });
-        }
-      }),
-    );
+  async syncAfterReopen(taskId: string, repos: Repositories): Promise<void> {
+    const outgoing = await repos.dependencies.findByPredecessor(taskId);
+    for (const dep of outgoing) {
+      if (dep.type !== "FINISH_TO_START") continue;
+      const successor = await repos.tasks.findById(dep.successorId);
+      if (
+        successor &&
+        successor.status !== "DONE" &&
+        successor.status !== "BLOCKED"
+      ) {
+        await repos.tasks.update(successor.id, { status: "BLOCKED" });
+      }
+    }
   }
 
   /** Read model: incoming dependencies of a task, enriched with predecessor. */
@@ -124,24 +141,31 @@ export class DependencyService {
     return Object.fromEntries(entries);
   }
 
-  private async unblockIfSatisfied(taskId: string): Promise<void> {
-    const task = await this.tasks.findById(taskId);
+  /** Unblock a task if none of its FS predecessors still block it. */
+  async unblockIfSatisfied(
+    taskId: string,
+    repos: Repositories,
+  ): Promise<void> {
+    const task = await repos.tasks.findById(taskId);
     if (!task || task.status !== "BLOCKED") return;
 
-    const statuses = await this.finishToStartPredecessorStatuses(taskId);
+    const statuses = await this.finishToStartPredecessorStatuses(taskId, repos);
     if (!shouldBlockSuccessor(statuses)) {
-      await this.tasks.update(taskId, { status: "TODO" });
+      await repos.tasks.update(taskId, { status: "TODO" });
     }
   }
 
-  private async finishToStartPredecessorStatuses(taskId: string) {
-    const incoming = await this.dependencies.findBySuccessor(taskId);
+  private async finishToStartPredecessorStatuses(
+    taskId: string,
+    repos: Repositories,
+  ) {
+    const incoming = await repos.dependencies.findBySuccessor(taskId);
     const fs = incoming.filter((d) => d.type === "FINISH_TO_START");
-    const predecessors = await Promise.all(
-      fs.map((d) => this.tasks.findById(d.predecessorId)),
-    );
-    return predecessors
-      .filter((t): t is NonNullable<typeof t> => t !== null)
-      .map((t) => t.status);
+    const statuses: TaskStatus[] = [];
+    for (const d of fs) {
+      const predecessor = await repos.tasks.findById(d.predecessorId);
+      if (predecessor) statuses.push(predecessor.status);
+    }
+    return statuses;
   }
 }

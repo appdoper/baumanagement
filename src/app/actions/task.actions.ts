@@ -18,6 +18,11 @@ export interface CreateTaskActionInput {
   deadline?: string | null;
 }
 
+export interface UpdateTaskActionInput extends CreateTaskActionInput {
+  /** Optimistic-concurrency version the client last read (from Task.version). */
+  version?: number;
+}
+
 export async function createTaskAction(
   input: CreateTaskActionInput,
 ): Promise<ActionResult<{ id: string }>> {
@@ -43,8 +48,8 @@ export async function createTaskAction(
 
 export async function updateTaskAction(
   id: string,
-  input: CreateTaskActionInput,
-): Promise<ActionResult<{ id: string }>> {
+  input: UpdateTaskActionInput,
+): Promise<ActionResult<{ id: string; version: number }>> {
   try {
     const task = await taskService.update(id, {
       title: input.title,
@@ -57,9 +62,10 @@ export async function updateTaskAction(
       plannedStart: input.plannedStart ? new Date(input.plannedStart) : null,
       plannedEnd: input.plannedEnd ? new Date(input.plannedEnd) : null,
       deadline: input.deadline ? new Date(input.deadline) : null,
+      version: input.version,
     });
     revalidatePath(`/projects/${input.projectId}`);
-    return { ok: true, data: { id: task.id } };
+    return { ok: true, data: { id: task.id, version: task.version } };
   } catch (e) {
     return toActionError(e);
   }
@@ -69,9 +75,10 @@ export async function updateTaskStatusAction(
   id: string,
   status: TaskStatus,
   projectId: string,
+  version?: number,
 ): Promise<ActionResult<{ id: string }>> {
   try {
-    const task = await taskService.update(id, { status });
+    const task = await taskService.update(id, { status, version });
     revalidatePath(`/projects/${projectId}`);
     return { ok: true, data: { id: task.id } };
   } catch (e) {
