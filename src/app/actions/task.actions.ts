@@ -13,6 +13,8 @@ export interface CreateTaskActionInput {
   person?: TaskPerson | null;
   status?: TaskStatus;
   estimatedCostCents?: number | null;
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
   deadline?: string | null;
 }
 
@@ -28,6 +30,8 @@ export async function createTaskAction(
       person: input.person ?? null,
       status: input.status,
       estimatedCostCents: input.estimatedCostCents ?? null,
+      plannedStart: input.plannedStart ? new Date(input.plannedStart) : null,
+      plannedEnd: input.plannedEnd ? new Date(input.plannedEnd) : null,
       deadline: input.deadline ? new Date(input.deadline) : null,
     });
     revalidatePath(`/projects/${input.projectId}`);
@@ -50,6 +54,8 @@ export async function updateTaskAction(
       person: input.person ?? null,
       status: input.status,
       estimatedCostCents: input.estimatedCostCents ?? null,
+      plannedStart: input.plannedStart ? new Date(input.plannedStart) : null,
+      plannedEnd: input.plannedEnd ? new Date(input.plannedEnd) : null,
       deadline: input.deadline ? new Date(input.deadline) : null,
     });
     revalidatePath(`/projects/${input.projectId}`);

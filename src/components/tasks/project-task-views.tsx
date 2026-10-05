@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { LayoutGrid, List, Pencil, Plus, Trash2, Workflow } from "lucide-react";
+import { CalendarDays, LayoutGrid, List, Pencil, Plus, Trash2, Workflow } from "lucide-react";
 import type { Project } from "@/domain/project/project.entity";
 import type { Location } from "@/domain/location/location.entity";
 import type { Task } from "@/domain/task/task.entity";
@@ -22,6 +22,7 @@ import { TaskFormSheet } from "./task-form-sheet";
 import { TaskTable } from "./task-table";
 import { TaskBoard } from "./task-board";
 import { ProjectDependencyGraph } from "./project-dependency-graph";
+import { ProjectCalendarView } from "./project-calendar-view";
 import { PERSON_LABELS } from "./person-badge";
 
 const ALL = "__all__";
@@ -131,6 +132,10 @@ export function ProjectTaskViews({
               <Workflow />
               Graph
             </TabsTrigger>
+            <TabsTrigger value="calendar">
+              <CalendarDays />
+              Kalender
+            </TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2">
@@ -175,6 +180,13 @@ export function ProjectTaskViews({
       <TabsContent value="graph" className="min-h-0 flex-1 overflow-hidden">
         {/* Graph shows the full dependency network regardless of the filter. */}
         <ProjectDependencyGraph tasks={tasks} predecessorMap={predecessorMap} />
+      </TabsContent>
+      <TabsContent value="calendar" className="min-h-0 flex-1 overflow-hidden">
+        <ProjectCalendarView
+          tasks={filteredTasks}
+          projects={projects}
+          predecessorMap={predecessorMap}
+        />
       </TabsContent>
     </Tabs>
   );

@@ -47,8 +47,13 @@ const formSchema = z.object({
       (v) => !v || !Number.isNaN(Number(v.replace(",", "."))),
       "Ungültiger Betrag.",
     ),
+  plannedStart: z.string().optional(),
+  plannedEnd: z.string().optional(),
   deadline: z.string().optional(),
-});
+}).refine(
+  (v) => !v.plannedStart || !v.plannedEnd || v.plannedEnd >= v.plannedStart,
+  { path: ["plannedEnd"], message: "Ende darf nicht vor dem Start liegen." },
+);
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -92,6 +97,8 @@ export function TaskForm({
         task?.estimatedCostCents != null
           ? String(task.estimatedCostCents / 100)
           : "",
+      plannedStart: toDateInputValue(task?.plannedStart),
+      plannedEnd: toDateInputValue(task?.plannedEnd),
       deadline: toDateInputValue(task?.deadline),
     },
   });
@@ -128,6 +135,8 @@ export function TaskForm({
           : null,
       status: values.status,
       estimatedCostCents: euros != null ? eurosToCents(euros) : null,
+      plannedStart: values.plannedStart || null,
+      plannedEnd: values.plannedEnd || null,
       deadline: values.deadline || null,
     };
 
@@ -248,6 +257,30 @@ export function TaskForm({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="task-planned-start">Durchführung (Start)</Label>
+            <Input
+              id="task-planned-start"
+              type="date"
+              {...register("plannedStart")}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="task-planned-end">Durchführung (Ende)</Label>
+            <Input
+              id="task-planned-end"
+              type="date"
+              {...register("plannedEnd")}
+            />
+            {errors.plannedEnd && (
+              <p className="text-sm text-destructive">
+                {errors.plannedEnd.message}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
