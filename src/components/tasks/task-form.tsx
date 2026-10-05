@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -30,6 +30,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SheetFooter } from "@/components/ui/sheet";
+import {
+  AUTOSAVE_DELAY_MS,
+  AutoSaveStatus,
+  type SaveState,
+} from "@/components/shared/auto-save-status";
 
 const NONE = "__none__";
 
@@ -59,6 +64,29 @@ type FormValues = z.infer<typeof formSchema>;
 
 const URL_LIKE = /^(https?:\/\/|www\.)/i;
 
+function buildPayload(values: FormValues, version?: number) {
+  const euros = values.estimatedCostEuros
+    ? Number(values.estimatedCostEuros.replace(",", "."))
+    : null;
+  return {
+    title: values.title,
+    projectId: values.projectId,
+    description: values.description || null,
+    procurementSource: values.procurementSource || null,
+    person:
+      values.person && values.person !== NONE
+        ? (values.person as TaskPerson)
+        : null,
+    status: values.status,
+    estimatedCostCents: euros != null ? eurosToCents(euros) : null,
+    plannedStart: values.plannedStart || null,
+    plannedEnd: values.plannedEnd || null,
+    deadline: values.deadline || null,
+    // Optimistic-concurrency token (only meaningful on update).
+    version,
+  };
+}
+
 export function TaskForm({
   projects,
   defaultProjectId,
@@ -83,9 +111,12 @@ export function TaskForm({
     handleSubmit,
     setValue,
     watch,
+    getValues,
+    trigger,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
+    mode: "onChange",
     defaultValues: {
       title: task?.title ?? "",
       projectId: task?.projectId ?? defaultProjectId ?? "",
@@ -119,33 +150,12 @@ export function TaskForm({
     projects.map((p) => [p.id, p.name]),
   );
 
+  // --- Create mode: explicit submit (a brand-new task can't auto-save). ---
   function onSubmit(values: FormValues) {
-    const euros = values.estimatedCostEuros
-      ? Number(values.estimatedCostEuros.replace(",", "."))
-      : null;
-
-    const payload = {
-      title: values.title,
-      projectId: values.projectId,
-      description: values.description || null,
-      procurementSource: values.procurementSource || null,
-      person:
-        values.person && values.person !== NONE
-          ? (values.person as TaskPerson)
-          : null,
-      status: values.status,
-      estimatedCostCents: euros != null ? eurosToCents(euros) : null,
-      plannedStart: values.plannedStart || null,
-      plannedEnd: values.plannedEnd || null,
-      deadline: values.deadline || null,
-    };
-
     startTransition(async () => {
-      const result = task
-        ? await updateTaskAction(task.id, payload)
-        : await createTaskAction(payload);
+      const result = await createTaskAction(buildPayload(values));
       if (result.ok) {
-        toast.success(isEdit ? "Vorgang aktualisiert." : "Vorgang erstellt.");
+        toast.success("Vorgang erstellt.");
         onSuccess?.();
       } else {
         toast.error(result.error);
@@ -153,9 +163,73 @@ export function TaskForm({
     });
   }
 
+  // --- Edit mode: debounced auto-save, no save button. ---
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Current server version; advanced after every successful save so the next
+  // save carries the up-to-date optimistic-concurrency token.
+  const versionRef = useRef<number | undefined>(task?.version);
+  const savingRef = useRef(false);
+  const pendingRef = useRef(false);
+
+  const runSave = useCallback(async () => {
+    if (!task) return;
+    // Don't persist an invalid form (e.g. empty title); wait for a valid edit.
+    if (!(await trigger())) return;
+    // One save in flight at a time; coalesce further changes into a re-run.
+    if (savingRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    savingRef.current = true;
+    setSaveState("saving");
+
+    const result = await updateTaskAction(
+      task.id,
+      buildPayload(getValues(), versionRef.current),
+    );
+
+    savingRef.current = false;
+    if (result.ok) {
+      versionRef.current = result.data.version;
+      setSaveError(null);
+      setSaveState("saved");
+    } else {
+      setSaveError(result.error);
+      setSaveState("error");
+    }
+
+    if (pendingRef.current) {
+      pendingRef.current = false;
+      void runSave();
+    }
+  }, [task, trigger, getValues]);
+
+  // Debounce changes, then auto-save.
+  useEffect(() => {
+    if (!isEdit) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sub = watch(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void runSave(), AUTOSAVE_DELAY_MS);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      sub.unsubscribe();
+    };
+  }, [isEdit, watch, runSave]);
+
   return (
     <form
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={
+        isEdit
+          ? (e) => {
+              // Enter triggers an immediate save instead of a create.
+              e.preventDefault();
+              void runSave();
+            }
+          : handleSubmit(onSubmit)
+      }
       className="flex min-h-0 flex-1 flex-col"
     >
       <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
@@ -332,14 +406,14 @@ export function TaskForm({
         )}
       </div>
 
-      <SheetFooter className="shrink-0 flex-row justify-end gap-2 border-t">
-        <Button type="submit" disabled={isPending}>
-          {isPending
-            ? "Speichern…"
-            : isEdit
-              ? "Änderungen speichern"
-              : "Vorgang erstellen"}
-        </Button>
+      <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t">
+        {isEdit ? (
+          <AutoSaveStatus state={saveState} error={saveError} />
+        ) : (
+          <Button type="submit" disabled={isPending}>
+            {isPending ? "Speichern…" : "Vorgang erstellen"}
+          </Button>
+        )}
       </SheetFooter>
     </form>
   );

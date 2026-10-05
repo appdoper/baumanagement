@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useTransition, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type ReactElement,
+} from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -32,6 +39,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  AUTOSAVE_DELAY_MS,
+  AutoSaveStatus,
+  type SaveState,
+} from "@/components/shared/auto-save-status";
 
 const NONE = "__none__";
 
@@ -69,10 +81,14 @@ export function ProjectFormSheet({
     register,
     handleSubmit,
     setValue,
+    watch,
+    getValues,
+    trigger: validateForm,
     reset,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
+    mode: "onChange",
     defaultValues: {
       name: project?.name ?? "",
       description: project?.description ?? "",
@@ -90,30 +106,100 @@ export function ProjectFormSheet({
     ...Object.fromEntries(parentOptions.map((p) => [p.id, p.name])),
   };
 
-  function onSubmit(values: FormValues) {
-    const payload = {
+  function buildPayload(values: FormValues, locIds: string[]) {
+    return {
       name: values.name,
       description: values.description?.trim() ? values.description.trim() : null,
       parentId:
         values.parentId && values.parentId !== NONE ? values.parentId : null,
-      locationIds,
+      locationIds: locIds,
     };
+  }
+
+  // --- Create mode: explicit submit. ---
+  function onSubmit(values: FormValues) {
     startTransition(async () => {
-      const result = project
-        ? await updateProjectAction(project.id, payload)
-        : await createProjectAction(payload);
+      const result = await createProjectAction(buildPayload(values, locationIds));
       if (result.ok) {
-        toast.success(isEdit ? "Projekt aktualisiert." : "Projekt erstellt.");
-        if (!isEdit) {
-          reset({ name: "", description: "", parentId: NONE });
-          setLocationIds([]);
-        }
+        toast.success("Projekt erstellt.");
+        reset({ name: "", description: "", parentId: NONE });
+        setLocationIds([]);
         setOpen(false);
       } else {
         toast.error(result.error);
       }
     });
   }
+
+  // --- Edit mode: debounced auto-save, no save button. ---
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Latest Standort selection (kept outside RHF) for the save closure.
+  const locationIdsRef = useRef(locationIds);
+  const savingRef = useRef(false);
+  const pendingRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const runSave = useCallback(async () => {
+    if (!project) return;
+    // Don't persist an invalid form (e.g. empty name); wait for a valid edit.
+    if (!(await validateForm())) return;
+    // One save in flight at a time; coalesce further changes into a re-run.
+    if (savingRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    savingRef.current = true;
+    setSaveState("saving");
+
+    const result = await updateProjectAction(
+      project.id,
+      buildPayload(getValues(), locationIdsRef.current),
+    );
+
+    savingRef.current = false;
+    if (result.ok) {
+      setSaveError(null);
+      setSaveState("saved");
+    } else {
+      setSaveError(result.error);
+      setSaveState("error");
+    }
+
+    if (pendingRef.current) {
+      pendingRef.current = false;
+      void runSave();
+    }
+    // buildPayload is a stable local helper (no external deps).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, validateForm, getValues]);
+
+  const scheduleSave = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => void runSave(), AUTOSAVE_DELAY_MS);
+  }, [runSave]);
+
+  // Auto-save on form field changes (name, description, parent).
+  useEffect(() => {
+    if (!isEdit) return;
+    const sub = watch(() => scheduleSave());
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      sub.unsubscribe();
+    };
+  }, [isEdit, watch, scheduleSave]);
+
+  // Auto-save on Standort changes (separate state); skip the initial mount.
+  const locationInitRef = useRef(true);
+  useEffect(() => {
+    locationIdsRef.current = locationIds;
+    if (!isEdit) return;
+    if (locationInitRef.current) {
+      locationInitRef.current = false;
+      return;
+    }
+    scheduleSave();
+  }, [isEdit, locationIds, scheduleSave]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -131,7 +217,15 @@ export function ProjectFormSheet({
         </SheetHeader>
 
         <form
-          onSubmit={handleSubmit(onSubmit)}
+          onSubmit={
+            isEdit
+              ? (e) => {
+                  // Enter triggers an immediate save instead of a create.
+                  e.preventDefault();
+                  void runSave();
+                }
+              : handleSubmit(onSubmit)
+          }
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
@@ -183,14 +277,14 @@ export function ProjectFormSheet({
             </div>
           </div>
 
-          <SheetFooter className="shrink-0 flex-row justify-end gap-2 border-t">
-            <Button type="submit" disabled={isPending}>
-              {isPending
-                ? "Speichern…"
-                : isEdit
-                  ? "Änderungen speichern"
-                  : "Projekt erstellen"}
-            </Button>
+          <SheetFooter className="shrink-0 flex-row items-center justify-end gap-2 border-t">
+            {isEdit ? (
+              <AutoSaveStatus state={saveState} error={saveError} />
+            ) : (
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Speichern…" : "Projekt erstellen"}
+              </Button>
+            )}
           </SheetFooter>
         </form>
       </SheetContent>
