@@ -112,10 +112,15 @@ model Project {
   // Standort tags (many-to-many). A project can carry several locations.
   locations Location[] @relation("ProjectLocations")
 
+  // Soft delete: non-null means the project is logically deleted. Read queries
+  // filter `deletedAt: null` so deletes never cascade-destroy data physically.
+  deletedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([parentId])
+  @@index([deletedAt])
 }
 
 // ---------- Tasks ----------
@@ -124,6 +129,13 @@ model Task {
   title       String
   description String?
   status      TaskStatus @default(TODO)
+
+  // Optimistic concurrency control: bumped on every write. A client update must
+  // carry the version it read; a mismatch means someone else edited meanwhile.
+  version Int @default(1)
+
+  // Soft delete (see Project.deletedAt).
+  deletedAt DateTime?
 
   // Free-text procurement source (shop, supplier, URL, …). Not shown in lists.
   procurementSource String?
@@ -168,6 +180,7 @@ model Task {
   @@index([assigneeId])
   @@index([status])
   @@index([person])
+  @@index([deletedAt])
 }
 
 // ---------- Dependencies (cross-project) ----------
