@@ -134,72 +134,76 @@ export function ProjectFormSheet({
   // --- Edit mode: debounced auto-save, no save button. ---
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
-  // Latest Standort selection (kept outside RHF) for the save closure.
-  const locationIdsRef = useRef(locationIds);
   const savingRef = useRef(false);
   const pendingRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const runSave = useCallback(async () => {
-    if (!project) return;
-    // Don't persist an invalid form (e.g. empty name); wait for a valid edit.
-    if (!(await validateForm())) return;
-    // One save in flight at a time; coalesce further changes into a re-run.
-    if (savingRef.current) {
-      pendingRef.current = true;
-      return;
-    }
-    savingRef.current = true;
-    setSaveState("saving");
+  // The actual save, kept in a ref and refreshed every render. The scheduler
+  // and the effects below can then stay STABLE across the re-renders that each
+  // successful save causes (revalidation hands down a new `project` prop).
+  // Without this the Standort effect would re-run after every save and schedule
+  // another one — an infinite save loop.
+  const saveRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    saveRef.current = async () => {
+      if (!project) return;
+      // Don't persist an invalid form (e.g. empty name); wait for a valid edit.
+      if (!(await validateForm())) return;
+      // One save in flight at a time; coalesce further changes into a re-run.
+      if (savingRef.current) {
+        pendingRef.current = true;
+        return;
+      }
+      savingRef.current = true;
+      setSaveState("saving");
 
-    const result = await updateProjectAction(
-      project.id,
-      buildPayload(getValues(), locationIdsRef.current),
-    );
+      const result = await updateProjectAction(
+        project.id,
+        buildPayload(getValues(), locationIds),
+      );
 
-    savingRef.current = false;
-    if (result.ok) {
-      setSaveError(null);
-      setSaveState("saved");
-    } else {
-      setSaveError(result.error);
-      setSaveState("error");
-    }
+      savingRef.current = false;
+      if (result.ok) {
+        setSaveError(null);
+        setSaveState("saved");
+      } else {
+        setSaveError(result.error);
+        setSaveState("error");
+      }
 
-    if (pendingRef.current) {
-      pendingRef.current = false;
-      void runSave();
-    }
-    // buildPayload is a stable local helper (no external deps).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, validateForm, getValues]);
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        void saveRef.current();
+      }
+    };
+  });
 
+  // Stable debounced scheduler — always invokes the latest save closure.
   const scheduleSave = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void runSave(), AUTOSAVE_DELAY_MS);
-  }, [runSave]);
+    timerRef.current = setTimeout(() => void saveRef.current(), AUTOSAVE_DELAY_MS);
+  }, []);
 
-  // Auto-save on form field changes (name, description, parent).
+  // Auto-save on form field changes — only while the sheet is open in edit mode.
   useEffect(() => {
-    if (!isEdit) return;
+    if (!isEdit || !open) return;
     const sub = watch(() => scheduleSave());
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       sub.unsubscribe();
     };
-  }, [isEdit, watch, scheduleSave]);
+  }, [isEdit, open, watch, scheduleSave]);
 
-  // Auto-save on Standort changes (separate state); skip the initial mount.
+  // Auto-save on Standort changes (separate state); skip the initial value.
   const locationInitRef = useRef(true);
   useEffect(() => {
-    locationIdsRef.current = locationIds;
-    if (!isEdit) return;
+    if (!isEdit || !open) return;
     if (locationInitRef.current) {
       locationInitRef.current = false;
       return;
     }
     scheduleSave();
-  }, [isEdit, locationIds, scheduleSave]);
+  }, [isEdit, open, locationIds, scheduleSave]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -222,7 +226,7 @@ export function ProjectFormSheet({
               ? (e) => {
                   // Enter triggers an immediate save instead of a create.
                   e.preventDefault();
-                  void runSave();
+                  void saveRef.current();
                 }
               : handleSubmit(onSubmit)
           }
