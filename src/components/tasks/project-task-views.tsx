@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, LayoutGrid, List, Pencil, Plus, Trash2, Workflow } from "lucide-react";
+import { CalendarDays, Eye, EyeOff, LayoutGrid, List, Pencil, Plus, Trash2, Workflow } from "lucide-react";
 import type { Project } from "@/domain/project/project.entity";
 import type { Location } from "@/domain/location/location.entity";
 import type { Task } from "@/domain/task/task.entity";
@@ -46,12 +46,22 @@ export function ProjectTaskViews({
   predecessorMap: Record<string, PredecessorLink[]>;
 }) {
   const [personFilter, setPersonFilter] = useState<string>(ALL);
+  // Done tasks are hidden by default; the toggle reveals them.
+  const [showDone, setShowDone] = useState(false);
 
   const filteredTasks = useMemo(() => {
-    if (personFilter === ALL) return tasks;
-    if (personFilter === NONE) return tasks.filter((t) => !t.person);
-    return tasks.filter((t) => t.person === personFilter);
-  }, [tasks, personFilter]);
+    let result = tasks;
+    if (personFilter === NONE) result = result.filter((t) => !t.person);
+    else if (personFilter !== ALL)
+      result = result.filter((t) => t.person === personFilter);
+    if (!showDone) result = result.filter((t) => t.status !== "DONE");
+    return result;
+  }, [tasks, personFilter, showDone]);
+
+  const doneCount = useMemo(
+    () => tasks.filter((t) => t.status === "DONE").length,
+    [tasks],
+  );
 
   const personItems: Record<string, string> = {
     [ALL]: "Alle Personen",
@@ -138,7 +148,25 @@ export function ProjectTaskViews({
             </TabsTrigger>
           </TabsList>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant={showDone ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setShowDone((v) => !v)}
+              aria-pressed={showDone}
+              title={
+                showDone ? "Erledigte Vorgänge ausblenden" : "Erledigte Vorgänge anzeigen"
+              }
+            >
+              {showDone ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+              {showDone ? "Erledigte ausblenden" : "Erledigte anzeigen"}
+              {doneCount > 0 && (
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  ({doneCount})
+                </span>
+              )}
+            </Button>
+
             <span className="text-sm text-muted-foreground">Person:</span>
             <Select
               items={personItems}

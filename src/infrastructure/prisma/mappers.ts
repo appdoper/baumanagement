@@ -85,6 +85,7 @@ export function toTask(row: PrismaTask): Task {
     deadline: row.deadline,
     actualStart: row.actualStart,
     actualEnd: row.actualEnd,
+    completedAt: row.completedAt,
     projectId: row.projectId,
     locationId: row.locationId,
     createdAt: row.createdAt,

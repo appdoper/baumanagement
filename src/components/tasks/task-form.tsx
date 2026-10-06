@@ -13,7 +13,7 @@ import {
   createTaskAction,
   updateTaskAction,
 } from "@/app/actions/task.actions";
-import { eurosToCents, toDateInputValue } from "@/lib/format";
+import { eurosToCents, formatDate, toDateInputValue } from "@/lib/format";
 import { STATUS_LABELS } from "./task-status-badge";
 import { PERSON_LABELS } from "./person-badge";
 import { LinkifiedText } from "./linkified-text";
@@ -379,6 +379,12 @@ export function TaskForm({
             <Input id="task-deadline" type="date" {...register("deadline")} />
           </div>
         </div>
+
+        {task?.completedAt && (
+          <p className="text-sm text-muted-foreground">
+            Erledigt am {formatDate(task.completedAt)}
+          </p>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="task-cost">Geschätzte Kosten (€)</Label>

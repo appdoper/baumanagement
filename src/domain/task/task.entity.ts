@@ -27,6 +27,8 @@ export interface Task {
   deadline: Date | null;
   actualStart: Date | null;
   actualEnd: Date | null;
+  /** When the task was moved to DONE (null while not done). */
+  completedAt: Date | null;
   projectId: string;
   locationId: string | null;
   createdAt: Date;

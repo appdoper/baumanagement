@@ -26,6 +26,7 @@ export class PrismaTaskRepository implements TaskRepository {
         deadline: data.deadline ?? null,
         actualStart: data.actualStart ?? null,
         actualEnd: data.actualEnd ?? null,
+        completedAt: data.completedAt ?? null,
         projectId: data.projectId,
         locationId: data.locationId ?? null,
       },

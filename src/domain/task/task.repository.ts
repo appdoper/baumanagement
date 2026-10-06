@@ -13,6 +13,7 @@ export interface NewTask {
   deadline?: Date | null;
   actualStart?: Date | null;
   actualEnd?: Date | null;
+  completedAt?: Date | null;
   projectId: string;
   locationId?: string | null;
 }
@@ -30,6 +31,7 @@ export interface TaskPatch {
   deadline?: Date | null;
   actualStart?: Date | null;
   actualEnd?: Date | null;
+  completedAt?: Date | null;
   projectId?: string;
   locationId?: string | null;
 }

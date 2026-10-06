@@ -1,6 +1,7 @@
 import type { Task } from "@/domain/task/task.entity";
 import type {
   TaskFilter,
+  TaskPatch,
   TaskRepository,
 } from "@/domain/task/task.repository";
 import type { ProjectRepository } from "@/domain/project/project.repository";
@@ -26,7 +27,9 @@ export class TaskService {
   async create(input: CreateTaskInput): Promise<Task> {
     const data = parseOrThrow(createTaskSchema, input, "Ungültige Vorgangsdaten.");
     await this.assertProjectExists(data.projectId);
-    return this.tasks.create(data);
+    // A task created directly as DONE records its completion time.
+    const completedAt = data.status === "DONE" ? new Date() : null;
+    return this.tasks.create({ ...data, completedAt });
   }
 
   async getById(id: string): Promise<Task> {
@@ -54,10 +57,20 @@ export class TaskService {
       const existing = await repos.tasks.findById(id);
       if (!existing) throw new NotFoundError("Task", id);
 
+      // Stamp (or clear) the completion time together with the status change.
+      const patchWithCompletion: TaskPatch = { ...patch };
+      if (patch.status !== undefined) {
+        if (patch.status === "DONE" && existing.status !== "DONE") {
+          patchWithCompletion.completedAt = new Date();
+        } else if (patch.status !== "DONE" && existing.status === "DONE") {
+          patchWithCompletion.completedAt = null;
+        }
+      }
+
       const updated =
         version != null
-          ? await repos.tasks.updateWithVersion(id, version, patch)
-          : await repos.tasks.update(id, patch);
+          ? await repos.tasks.updateWithVersion(id, version, patchWithCompletion)
+          : await repos.tasks.update(id, patchWithCompletion);
 
       // null = the version in the DB no longer matches what the client read.
       if (!updated) throw new ConflictError();
