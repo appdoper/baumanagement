@@ -12,7 +12,9 @@ export const authConfig = {
   // UntrustedHost; `next dev` trusts localhost automatically.
   trustHost: true,
   pages: { signIn: "/login" },
-  session: { strategy: "jwt" },
+  // JWT strategy: maxAge drives both the token and the session-cookie lifetime.
+  // Keep users signed in for 7 days (overrides Auth.js' 30-day default).
+  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
   providers: [],
   callbacks: {
     // Pure (no Prisma) callbacks live here so the edge-safe proxy also runs
