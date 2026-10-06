@@ -163,7 +163,7 @@ export function TaskForm({
     });
   }
 
-  // --- Edit mode: debounced auto-save, no save button. ---
+  // --- Edit mode: auto-save, no save button. ---
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   // Current server version; advanced after every successful save so the next
@@ -171,53 +171,77 @@ export function TaskForm({
   const versionRef = useRef<number | undefined>(task?.version);
   const savingRef = useRef(false);
   const pendingRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const runSave = useCallback(async () => {
-    if (!task) return;
-    // Don't persist an invalid form (e.g. empty title); wait for a valid edit.
-    if (!(await trigger())) return;
-    // One save in flight at a time; coalesce further changes into a re-run.
-    if (savingRef.current) {
-      pendingRef.current = true;
-      return;
+  // The actual save, kept in a ref and refreshed every render so the scheduler
+  // and effects stay stable across the re-renders a save triggers.
+  const saveRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    saveRef.current = async () => {
+      if (!task) return;
+      // Don't persist an invalid form (e.g. empty title); wait for a valid edit.
+      if (!(await trigger())) return;
+      // One save in flight at a time; coalesce further changes into a re-run.
+      if (savingRef.current) {
+        pendingRef.current = true;
+        return;
+      }
+      savingRef.current = true;
+      setSaveState("saving");
+
+      const result = await updateTaskAction(
+        task.id,
+        buildPayload(getValues(), versionRef.current),
+      );
+
+      savingRef.current = false;
+      if (result.ok) {
+        versionRef.current = result.data.version;
+        setSaveError(null);
+        setSaveState("saved");
+      } else {
+        setSaveError(result.error);
+        setSaveState("error");
+      }
+
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        void saveRef.current();
+      }
+    };
+  });
+
+  // Debounced save — for free-text fields where typing shouldn't save per key.
+  const scheduleSave = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => void saveRef.current(), AUTOSAVE_DELAY_MS);
+  }, []);
+
+  // Immediate save — for deliberate choices (selects): cancels any pending
+  // debounce and persists right away so closing the dropdown saves instantly.
+  const flushSave = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = undefined;
     }
-    savingRef.current = true;
-    setSaveState("saving");
+    void saveRef.current();
+  }, []);
 
-    const result = await updateTaskAction(
-      task.id,
-      buildPayload(getValues(), versionRef.current),
-    );
-
-    savingRef.current = false;
-    if (result.ok) {
-      versionRef.current = result.data.version;
-      setSaveError(null);
-      setSaveState("saved");
-    } else {
-      setSaveError(result.error);
-      setSaveState("error");
-    }
-
-    if (pendingRef.current) {
-      pendingRef.current = false;
-      void runSave();
-    }
-  }, [task, trigger, getValues]);
-
-  // Debounce changes, then auto-save.
   useEffect(() => {
     if (!isEdit) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const sub = watch(() => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void runSave(), AUTOSAVE_DELAY_MS);
-    });
+    const sub = watch(() => scheduleSave());
     return () => {
-      if (timer) clearTimeout(timer);
       sub.unsubscribe();
+      // Sheet closed (or form unmounted) with a change still pending: flush it
+      // so an in-progress edit is never silently dropped. The request finishes
+      // even though the component is gone.
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = undefined;
+        void saveRef.current();
+      }
     };
-  }, [isEdit, watch, runSave]);
+  }, [isEdit, watch, scheduleSave]);
 
   return (
     <form
@@ -226,7 +250,7 @@ export function TaskForm({
           ? (e) => {
               // Enter triggers an immediate save instead of a create.
               e.preventDefault();
-              void runSave();
+              flushSave();
             }
           : handleSubmit(onSubmit)
       }
@@ -243,7 +267,14 @@ export function TaskForm({
 
         <div className="space-y-2">
           <Label htmlFor="task-project">Projekt *</Label>
-          <Select items={projectItems} value={projectId} onValueChange={(v) => setValue("projectId", v ?? "")}>
+          <Select
+            items={projectItems}
+            value={projectId}
+            onValueChange={(v) => {
+              setValue("projectId", v ?? "");
+              if (isEdit) flushSave();
+            }}
+          >
             <SelectTrigger id="task-project" className="w-full">
               <SelectValue placeholder="Bitte wählen" />
             </SelectTrigger>
@@ -317,7 +348,10 @@ export function TaskForm({
           <Select
             items={personItems}
             value={person}
-            onValueChange={(v) => setValue("person", v ?? NONE)}
+            onValueChange={(v) => {
+              setValue("person", v ?? NONE);
+              if (isEdit) flushSave();
+            }}
           >
             <SelectTrigger id="task-person" className="w-full">
               <SelectValue />
@@ -360,7 +394,14 @@ export function TaskForm({
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="task-status">Status</Label>
-            <Select items={STATUS_LABELS} value={status} onValueChange={(v) => setValue("status", (v ?? "TODO") as FormValues["status"])}>
+            <Select
+              items={STATUS_LABELS}
+              value={status}
+              onValueChange={(v) => {
+                setValue("status", (v ?? "TODO") as FormValues["status"]);
+                if (isEdit) flushSave();
+              }}
+            >
               <SelectTrigger id="task-status" className="w-full">
                 <SelectValue />
               </SelectTrigger>

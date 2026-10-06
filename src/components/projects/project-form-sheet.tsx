@@ -178,10 +178,20 @@ export function ProjectFormSheet({
     };
   });
 
-  // Stable debounced scheduler — always invokes the latest save closure.
+  // Stable debounced scheduler — for free-text fields (name, description).
   const scheduleSave = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => void saveRef.current(), AUTOSAVE_DELAY_MS);
+  }, []);
+
+  // Immediate save — for deliberate choices (parent, Standorte) and on close:
+  // cancels any pending debounce and persists right away.
+  const flushSave = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = undefined;
+    }
+    void saveRef.current();
   }, []);
 
   // Auto-save on form field changes — only while the sheet is open in edit mode.
@@ -189,8 +199,14 @@ export function ProjectFormSheet({
     if (!isEdit || !open) return;
     const sub = watch(() => scheduleSave());
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
       sub.unsubscribe();
+      // Closing the sheet with a change still pending: flush it so the edit is
+      // never silently dropped (the request finishes after the sheet is gone).
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = undefined;
+        void saveRef.current();
+      }
     };
   }, [isEdit, open, watch, scheduleSave]);
 
@@ -202,8 +218,8 @@ export function ProjectFormSheet({
       locationInitRef.current = false;
       return;
     }
-    scheduleSave();
-  }, [isEdit, open, locationIds, scheduleSave]);
+    flushSave();
+  }, [isEdit, open, locationIds, flushSave]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -255,7 +271,10 @@ export function ProjectFormSheet({
               <Select
                 items={parentItems}
                 defaultValue={initialParent ?? NONE}
-                onValueChange={(v) => setValue("parentId", v ?? undefined)}
+                onValueChange={(v) => {
+                  setValue("parentId", v ?? undefined);
+                  if (isEdit) flushSave();
+                }}
               >
                 <SelectTrigger id="project-parent" className="w-full">
                   <SelectValue placeholder="Keines (Hauptprojekt)" />
